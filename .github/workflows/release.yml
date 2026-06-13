@@ -3,18 +3,29 @@ name: Release
 on:
   push:
     tags: ["v*"]
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Tag to build (e.g. v0.1.0)"
-        required: true
 
 permissions:
   contents: write
 
 jobs:
+  # Create the GitHub Release first so the parallel build jobs have a single,
+  # already-existing target to upload to (avoids the "release not found" race
+  # when matrix jobs each try to create it).
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+                 --title "$GITHUB_REF_NAME" --generate-notes
+
   build:
     name: ${{ matrix.target }}
+    needs: create-release
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -50,4 +61,3 @@ jobs:
           tar: unix
           checksum: sha256
           token: ${{ secrets.GITHUB_TOKEN }}
-          ref: refs/tags/${{ github.event.inputs.tag || github.ref_name }}
