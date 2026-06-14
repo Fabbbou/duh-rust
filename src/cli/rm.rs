@@ -27,7 +27,13 @@ pub fn run(cmd: RmCmd) -> Result<()> {
             }
             pkg.unflag_ssh(&name);
             pkg.save(&target)?;
-            println!("removed alias {name} from package \"{target}\"");
+            println!(
+                "{}",
+                crate::ui::ok(&format!(
+                    "removed alias {name} from package {}",
+                    crate::ui::header(&target)
+                ))
+            );
         }
         RmCmd::Export { name } => {
             let mut pkg = Package::load(&target)?;
@@ -36,7 +42,13 @@ pub fn run(cmd: RmCmd) -> Result<()> {
             }
             pkg.unflag_ssh(&name);
             pkg.save(&target)?;
-            println!("removed export {name} from package \"{target}\"");
+            println!(
+                "{}",
+                crate::ui::ok(&format!(
+                    "removed export {name} from package {}",
+                    crate::ui::header(&target)
+                ))
+            );
         }
         RmCmd::Fn { name } => {
             let file = paths::package_functions_dir(&target)?.join(format!("{name}.sh"));
@@ -44,7 +56,13 @@ pub fn run(cmd: RmCmd) -> Result<()> {
                 bail!("no function {name:?} in package {target}");
             }
             fs::remove_file(&file)?;
-            println!("removed function {name} from package \"{target}\"");
+            println!(
+                "{}",
+                crate::ui::ok(&format!(
+                    "removed function {name} from package {}",
+                    crate::ui::header(&target)
+                ))
+            );
         }
     }
     Ok(())

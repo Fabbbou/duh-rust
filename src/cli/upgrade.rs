@@ -20,16 +20,29 @@ pub fn run(check_only: bool) -> Result<()> {
 
     // Only upgrade when the published release is strictly newer; never downgrade.
     if !is_newer(latest, current) {
-        println!("duh is up to date (v{current})");
+        println!(
+            "{}",
+            crate::ui::ok(&format!("duh is up to date (v{current})"))
+        );
         return Ok(());
     }
 
     if check_only {
-        println!("update available: v{current} → {latest_tag} (run `duh upgrade`)");
+        println!(
+            "update available: {} → {} {}",
+            crate::ui::dim(&format!("v{current}")),
+            crate::ui::header(&latest_tag),
+            crate::ui::dim("(run `duh upgrade`)")
+        );
         return Ok(());
     }
 
-    println!("upgrading duh v{current} → {latest_tag} ({target})…");
+    println!(
+        "upgrading duh {} → {} {}",
+        crate::ui::dim(&format!("v{current}")),
+        crate::ui::header(&latest_tag),
+        crate::ui::dim(&format!("({target})"))
+    );
 
     let asset = format!("duh-{target}.tar.gz");
     let base = format!("https://github.com/{REPO}/releases/download/{latest_tag}");
@@ -65,7 +78,7 @@ pub fn run(check_only: bool) -> Result<()> {
     }
 
     swap_binary(&new_bin)?;
-    println!("upgraded to {latest_tag}");
+    println!("{}", crate::ui::ok(&format!("upgraded to {latest_tag}")));
     Ok(())
 }
 

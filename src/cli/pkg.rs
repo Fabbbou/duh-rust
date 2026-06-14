@@ -94,9 +94,22 @@ fn list() -> Result<()> {
     for name in all {
         let enabled = prefs.packages.enabled.iter().any(|p| p == &name);
         let is_default = prefs.packages.default == name;
-        let mark = if enabled { "x" } else { " " };
-        let star = if is_default { " (default)" } else { "" };
-        println!("[{mark}] {name}{star}");
+        let badge = if is_default {
+            format!(" {}", crate::ui::default_badge())
+        } else {
+            String::new()
+        };
+        let dot = if enabled {
+            crate::ui::state(crate::ui::dot(), true)
+        } else {
+            crate::ui::dim(crate::ui::dot())
+        };
+        let label = if enabled {
+            crate::ui::header(&name)
+        } else {
+            crate::ui::dim(&name)
+        };
+        println!("{dot} {label}{badge}");
     }
     Ok(())
 }

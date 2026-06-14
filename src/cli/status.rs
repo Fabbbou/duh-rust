@@ -3,6 +3,7 @@
 use crate::config::prefs::Prefs;
 use crate::inject::cache;
 use crate::inject::generator::{self, GenOptions};
+use crate::ui;
 use anyhow::Result;
 
 /// Regenerate the cache and print the script for `eval`.
@@ -17,9 +18,9 @@ pub fn inject(quiet: bool) -> Result<()> {
 }
 
 /// `duh status` — human summary; `duh status --hook` — stat-only reload trigger.
-pub fn status(hook: bool) -> Result<()> {
+pub fn status(hook: bool, json: bool) -> Result<()> {
     if hook {
-        // Hot path: stat-only. Print a reload command only when stale.
+        // Hot path: stat-only, RAW output (eval'd by the shell). No ui, no json.
         if cache::is_stale()? {
             println!("eval \"$(duh inject --quiet)\"");
         }
@@ -27,16 +28,49 @@ pub fn status(hook: bool) -> Result<()> {
     }
 
     let c = generator::counts()?;
-    let state = if cache::is_stale()? {
-        "stale (run `duh-reload`, or it self-heals on the next prompt)"
+    let in_sync = !cache::is_stale()?;
+    let default = Prefs::load()?.packages.default;
+
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "packages": c.packages,
+                "aliases": c.aliases,
+                "exports": c.exports,
+                "functions": c.functions,
+                "in_sync": in_sync,
+                "default": default,
+            }))?
+        );
+        return Ok(());
+    }
+
+    let state = if in_sync {
+        ui::state("in sync", true)
     } else {
-        "in sync"
+        ui::state("stale", false)
     };
     println!(
-        "duh: {} package(s), {} alias(es), {} export(s), {} function(s) — {}",
-        c.packages, c.aliases, c.exports, c.functions, state
+        "{} {} package(s), {} alias(es), {} export(s), {} function(s) — {}",
+        ui::dot(),
+        c.packages,
+        c.aliases,
+        c.exports,
+        c.functions,
+        state
     );
-    let default = Prefs::load()?.packages.default;
-    println!("default package: {default}  (add/rm write here)");
+    if !in_sync {
+        println!(
+            "  {}",
+            ui::dim("run `duh-reload`, or it self-heals on the next prompt")
+        );
+    }
+    println!(
+        "{} default package: {}  {}",
+        ui::dim("·"),
+        ui::header(&default),
+        ui::dim("(add/rm write here)")
+    );
     Ok(())
 }

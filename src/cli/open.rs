@@ -39,6 +39,13 @@ pub fn run(package: Option<String>) -> Result<()> {
     if !status.success() {
         bail!("opener {bin:?} exited with failure");
     }
-    println!("opened package \"{name}\" ({}) with {tool}", dir.display());
+    println!(
+        "{}",
+        crate::ui::ok(&format!(
+            "opened package {} {} with {tool}",
+            crate::ui::header(&name),
+            crate::ui::dim(&format!("({})", dir.display()))
+        ))
+    );
     Ok(())
 }

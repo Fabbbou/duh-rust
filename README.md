@@ -79,6 +79,10 @@ duh inject                        # the script that wiring runs each shell start
 
 Every `add`/`rm` prints which package it wrote to, so you always know the target.
 
+Output is colorized when writing to a terminal and plain when piped (`NO_COLOR`
+is respected). Add `--no-color` for plain colors, `--plain` for ASCII-only, or
+`--json` (on `ls`/`status`) for machine-readable output.
+
 ### Reloading
 
 The per-prompt hook auto-reloads your shell on the next prompt after any change.
