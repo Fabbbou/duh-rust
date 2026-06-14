@@ -355,6 +355,73 @@ fn fn_doc_comment_shown_in_ls() {
         .stdout(predicate::str::contains("greet — says hello"));
 }
 
+/// Write a function file into the default package's functions dir.
+fn write_fn(home: &TempDir, file: &str, body: &str) {
+    let dir = home.path().join("data/packages/default/functions");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join(file), body).unwrap();
+}
+
+#[test]
+fn ls_fn_shows_script_function_tree() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["add", "alias", "seed", "x"])
+        .assert()
+        .success();
+    write_fn(
+        &home,
+        "git.sh",
+        "#!/usr/bin/env bash\n# git status, short\ngs() { git status -s; }\n",
+    );
+    duh(&home).args(["ls", "fn"]).assert().success().stdout(
+        predicate::str::contains("functions:")
+            .and(predicate::str::contains("git.sh"))
+            .and(predicate::str::contains("gs — git status, short")),
+    );
+}
+
+#[test]
+fn ls_fn_flag_shows_full_doc() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["add", "alias", "seed", "x"])
+        .assert()
+        .success();
+    write_fn(
+        &home,
+        "greet.sh",
+        "# say hello\n# politely\ngreet() { echo hi; }\n",
+    );
+    duh(&home)
+        .args(["ls", "--fn", "greet"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("say hello").and(predicate::str::contains("politely")));
+    duh(&home)
+        .args(["ls", "--fn", "nope"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no function named"));
+}
+
+#[test]
+fn inject_strips_leading_shebang() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["add", "alias", "seed", "x"])
+        .assert()
+        .success();
+    write_fn(&home, "f.sh", "#!/usr/bin/env bash\ngreet() { echo hi; }\n");
+    let out = duh(&home).args(["inject", "--quiet"]).output().unwrap();
+    let script = String::from_utf8(out.stdout).unwrap();
+    assert!(
+        !script.contains("#!/usr/bin/env bash"),
+        "shebang must be stripped"
+    );
+    assert!(script.contains("greet() { echo hi; }"), "body must remain");
+}
+
 #[test]
 fn generated_script_is_valid_bash() {
     let home = TempDir::new().unwrap();

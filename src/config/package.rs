@@ -113,28 +113,6 @@ impl Package {
     }
 }
 
-/// Extract the doc comment for a function file: the leading run of `#` comment
-/// lines at the top of the file, joined into a one-line summary. Returns the
-/// first non-empty comment line (mirrors the old Go duh's doc parsing).
-pub fn function_doc(path: &std::path::Path) -> Option<String> {
-    let body = fs::read_to_string(path).ok()?;
-    for line in body.lines() {
-        let t = line.trim();
-        if t.is_empty() {
-            continue;
-        }
-        if let Some(rest) = t.strip_prefix('#') {
-            let doc = rest.trim();
-            if !doc.is_empty() {
-                return Some(doc.to_string());
-            }
-        } else {
-            break; // first non-comment line ends the doc block
-        }
-    }
-    None
-}
-
 /// Lightweight, warn-only lint: a function file should contain only function
 /// definitions (and comments/blanks). Returns human-readable warnings for any
 /// statement found at brace-depth 0 that isn't a comment, blank, or function
@@ -148,7 +126,8 @@ pub fn function_lint(path: &std::path::Path) -> Vec<String> {
     let mut depth: i32 = 0;
     for (i, raw) in body.lines().enumerate() {
         let line = raw.trim();
-        if depth == 0 && !line.is_empty() && !line.starts_with('#') && !is_function_header(line) {
+        let is_header = crate::config::funcs::name_from_header(line).is_some();
+        if depth == 0 && !line.is_empty() && !line.starts_with('#') && !is_header {
             warnings.push(format!(
                 "{}:{}: top-level statement outside a function: {:?}",
                 path.display(),
@@ -162,28 +141,6 @@ pub fn function_lint(path: &std::path::Path) -> Vec<String> {
         }
     }
     warnings
-}
-
-/// Does this line open a function definition? Matches `name() {`,
-/// `name ()`, and `function name`.
-fn is_function_header(line: &str) -> bool {
-    let l = line.trim();
-    if let Some(rest) = l.strip_prefix("function ") {
-        return !rest.trim().is_empty();
-    }
-    // `name()` possibly followed by `{` — find the `(`.
-    if let Some(idx) = l.find('(') {
-        let name = l[..idx].trim();
-        let after = l[idx + 1..].trim_start();
-        let valid_name = !name.is_empty()
-            && name
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
-        if valid_name && after.starts_with(')') {
-            return true;
-        }
-    }
-    false
 }
 
 /// Net change in brace depth on a line, ignoring braces inside comments.
