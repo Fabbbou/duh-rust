@@ -27,6 +27,20 @@ echo 'eval "$(duh init --shell zsh)"'  >> ~/.zshrc
 
 Restart your shell. Done.
 
+## Migrating from the old Go `duh`
+
+Coming from the original Go version? This uninstalls the old `duh` binary and
+copies your packages + preferences into the new layout:
+
+```sh
+curl -sSL https://raw.githubusercontent.com/Fabbbou/duh-rust/main/migrate-from-go.sh | sh
+```
+
+It only removes the *old* binary (detected via its `self` subcommand — the new
+Rust binary is never touched), keeps your packages, and backs up anything it
+overwrites. Per-package `gitconfig` files aren't used by the new duh and are left
+in place with a warning. Run `DUH_MIGRATE_FORCE=1 … | sh` to skip prompts.
+
 ## Uninstall
 
 ```sh
