@@ -61,18 +61,33 @@ keep). Remember to remove the `eval "$(duh init ...)"` line from your shell rc.
 ## Usage
 
 ```sh
-duh add alias ll "ls -al"        # add an alias
+duh add alias ll "ls -al"        # add an alias (to the default package)
 duh add export EDITOR nvim        # add an export
 duh add fn greet                  # create a function (opens $EDITOR)
 
 duh rm alias ll                   # remove
-duh ls                            # list everything
+duh ls                            # list everything (shows each package + path)
 duh ls alias                      # list one kind
+duh ls --package work             # list one package
 
-duh inject                        # print the shell script (what eval runs)
-duh status                        # show sync state
-duh reload                        # force-regenerate now
+duh where                         # print every path duh uses
+duh open                          # open the default package folder in your editor
+duh open work                     # open a specific package folder
+
+duh status                        # show sync state + which package add/rm target
+duh init                          # one-time rc wiring (run once)
+duh inject                        # the script that wiring runs each shell start
 ```
+
+Every `add`/`rm` prints which package it wrote to, so you always know the target.
+
+### Reloading
+
+The per-prompt hook auto-reloads your shell on the next prompt after any change.
+To apply immediately in the current shell, the injected `duh-reload` function
+re-evals on the spot. (There is no `duh reload` command — a child process can't
+reload its parent shell; a shell function can.) `duh-cd` / `duh-cd-config` jump
+to the packages and config folders.
 
 ### Packages
 
@@ -91,19 +106,19 @@ shared one.
 
 ### SSH injection
 
+SSH injection is **opt-in**: only entries you flag are ever shipped to a remote.
+
 ```sh
-duh ssh user@host                 # ssh in with your aliases + exports loaded
-duh ssh user@host --cleanup       # remove the injected snippet afterwards
+duh add alias ll "ls -al" --ssh-safe   # flag an entry as ssh-safe
+duh ssh user@host                       # ships ONLY flagged entries
+duh ssh user@host --cleanup             # remove the injected snippet afterwards
 ```
 
-By default only aliases and exports are shipped (portable). Opt a host into
-functions in `~/.config/duh/ssh.toml`:
-
-```toml
-[hosts."user@host"]
-packages = ["default", "work"]
-inject_functions = true
-```
+Aliases/exports are never sent unless flagged, so secret exports never leak into
+your SSH sessions by accident. (Functions are only shipped to a host that
+explicitly sets `inject_functions=true`, and then unfiltered — see the doc.)
+Full details — what's injected, how it works, per-host config, and the security
+model — are in **[docs/ssh.md](docs/ssh.md)**.
 
 ## How the zero-latency check works
 

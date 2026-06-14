@@ -1,6 +1,7 @@
 //! Generate the shell script that `eval` consumes.
 
 use crate::config::package::Package;
+use crate::config::paths;
 use crate::config::prefs::Prefs;
 use crate::inject::escape;
 use anyhow::Result;
@@ -15,6 +16,9 @@ pub struct GenOptions {
     pub include_functions: bool,
     /// Restrict to these packages; when `None`, use all enabled packages.
     pub only_packages: Option<Vec<String>>,
+    /// SSH mode: emit ONLY entries explicitly flagged ssh-safe, and skip the
+    /// local shell helpers (duh-reload/duh-cd) that assume a local duh install.
+    pub ssh_safe_only: bool,
 }
 
 impl Default for GenOptions {
@@ -23,6 +27,7 @@ impl Default for GenOptions {
             quiet: false,
             include_functions: true,
             only_packages: None,
+            ssh_safe_only: false,
         }
     }
 }
@@ -44,11 +49,18 @@ pub fn generate(opts: &GenOptions) -> Result<String> {
         for (k, v) in pkg.aliases {
             escape::require_valid_name("alias", &k)?;
             reject_control_chars("alias", &k, &v)?;
+            // SSH mode: opt-in allowlist — skip anything not flagged ssh-safe.
+            if opts.ssh_safe_only && !pkg.ssh.alias_ok(&k) {
+                continue;
+            }
             aliases.insert(k, v);
         }
         for (k, v) in pkg.exports {
             escape::require_valid_name("export", &k)?;
             reject_control_chars("export", &k, &v)?;
+            if opts.ssh_safe_only && !pkg.ssh.export_ok(&k) {
+                continue;
+            }
             exports.insert(k, v);
         }
     }
@@ -68,6 +80,8 @@ pub fn generate(opts: &GenOptions) -> Result<String> {
     if opts.include_functions {
         for name in &packages {
             for file in Package::function_files(name)? {
+                // Warn-only safety lint (skip in quiet/rc context to avoid noise
+                // on every shell start; surfaced by `duh add fn` and `duh ls`).
                 let body = fs::read_to_string(&file)?;
                 if !opts.quiet {
                     out.push_str(&format!("# function file: {}\n", file.display()));
@@ -80,7 +94,35 @@ pub fn generate(opts: &GenOptions) -> Result<String> {
         }
     }
 
+    // Local-only shell helpers: a real reload (a child process can't reload the
+    // parent shell, but a shell function can) and safe cd helpers.
+    if !opts.ssh_safe_only {
+        out.push_str(&shell_helpers(opts.quiet)?);
+    }
+
     Ok(out)
+}
+
+/// Shell functions injected into the local shell only.
+fn shell_helpers(quiet: bool) -> Result<String> {
+    let packages_dir = paths::packages_dir()?;
+    let config_dir = paths::config_dir()?;
+    let mut s = String::new();
+    if !quiet {
+        s.push_str("# duh: shell helpers\n");
+    }
+    // Re-eval in the *current* shell — the honest version of the old `reload`.
+    s.push_str("duh-reload() { eval \"$(duh inject --quiet)\"; }\n");
+    // Safe cd helpers: only cd if the directory exists.
+    s.push_str(&format!(
+        "duh-cd() {{ [ -d {dir} ] && cd {dir} || echo 'duh: packages dir missing' >&2; }}\n",
+        dir = escape::single_quote(&packages_dir.to_string_lossy())
+    ));
+    s.push_str(&format!(
+        "duh-cd-config() {{ [ -d {dir} ] && cd {dir} || echo 'duh: config dir missing' >&2; }}\n",
+        dir = escape::single_quote(&config_dir.to_string_lossy())
+    ));
+    Ok(s)
 }
 
 /// Reject NUL and other control characters in a value (newline excepted —

@@ -60,7 +60,23 @@ pub fn run(host: &str, cleanup: bool, ssh_args: &[String]) -> Result<()> {
         quiet: true,
         include_functions,
         only_packages,
+        // Opt-in allowlist: only entries flagged `ssh-safe` are ever shipped.
+        ssh_safe_only: true,
     })?;
+
+    if include_functions {
+        eprintln!(
+            "warning: inject_functions=true for {host} — ALL function bodies in the \
+             selected packages are shipped unfiltered (the ssh-safe allowlist covers \
+             aliases/exports only). Use only with trusted packages. See docs/ssh.md."
+        );
+    }
+    if snippet.trim().is_empty() {
+        eprintln!(
+            "note: nothing flagged ssh-safe — connecting without injection.\n  \
+             Flag entries with `duh add alias <n> <v> --ssh-safe`. See `duh where` and docs/ssh.md."
+        );
+    }
 
     // Write a local temp file (0600, auto-cleaned), scp it over, then source it.
     let remote_path = "~/.duh_session.sh";

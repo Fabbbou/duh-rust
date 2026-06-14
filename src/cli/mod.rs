@@ -3,11 +3,13 @@
 mod add;
 mod init;
 mod ls;
+mod open;
 mod pkg;
 mod rm;
 mod ssh;
 mod status;
 mod uninstall;
+mod where_cmd;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -18,8 +20,10 @@ use clap::{Parser, Subcommand};
     version,
     about = "Inject your shell config (aliases, exports, functions) everywhere",
     long_about = "duh manages shell aliases, exports, and functions in TOML packages \
-                  and injects them into your shell — fast, direnv-style. \
-                  Add `eval \"$(duh init)\"` to your shell rc to get started."
+                  and injects them into your shell — fast, direnv-style.\n\n\
+                  Quick start: add `eval \"$(duh init)\"` to your shell rc.\n\
+                  `init` wires duh into your rc once; `inject` is the script that \
+                  wiring runs on each shell start (you rarely call it directly)."
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -42,13 +46,24 @@ enum Command {
     Ls {
         /// Optional filter: alias | export | fn
         kind: Option<ls::Kind>,
+        /// Show only this package
+        #[arg(short, long)]
+        package: Option<String>,
     },
     /// Manage packages (remote bundles of config)
     Pkg {
         #[command(subcommand)]
         cmd: pkg::PkgCmd,
     },
-    /// Emit the shell script to eval (use via `eval "$(duh inject)"`)
+    /// Print where duh stores everything (data, config, cache, packages…)
+    Where,
+    /// Open a package folder with your configured tool (vscode, nvim, …)
+    Open {
+        /// Package to open (defaults to the default package)
+        package: Option<String>,
+    },
+    /// Emit the generated alias/export/function script (run on every shell start
+    /// by the rc wiring; you rarely call this directly)
     Inject {
         /// Suppress comments (recommended for rc files)
         #[arg(long)]
@@ -60,9 +75,7 @@ enum Command {
         #[arg(long)]
         hook: bool,
     },
-    /// Force regenerate the cache and emit the inject script
-    Reload,
-    /// Print the shell rc snippet to wire duh into your prompt
+    /// Print the one-time shell rc wiring (run once: add `eval "$(duh init)"`)
     Init {
         /// Target shell (auto-detected from $SHELL if omitted)
         #[arg(long)]
@@ -103,11 +116,12 @@ impl Cli {
         match self.command {
             Command::Add { what } => add::run(what),
             Command::Rm { what } => rm::run(what),
-            Command::Ls { kind } => ls::run(kind),
+            Command::Ls { kind, package } => ls::run(kind, package),
             Command::Pkg { cmd } => pkg::run(cmd),
+            Command::Where => where_cmd::run(),
+            Command::Open { package } => open::run(package),
             Command::Inject { quiet } => status::inject(quiet),
             Command::Status { hook } => status::status(hook),
-            Command::Reload => status::reload(),
             Command::Init { shell } => init::run(shell),
             Command::Ssh {
                 host,
