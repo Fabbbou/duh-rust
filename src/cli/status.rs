@@ -1,5 +1,6 @@
-//! `duh inject`, `duh status [--hook]`, `duh reload`.
+//! `duh inject`, `duh status [--hook]`.
 
+use crate::config::prefs::Prefs;
 use crate::inject::cache;
 use crate::inject::generator::{self, GenOptions};
 use anyhow::Result;
@@ -27,7 +28,7 @@ pub fn status(hook: bool) -> Result<()> {
 
     let c = generator::counts()?;
     let state = if cache::is_stale()? {
-        "stale (run `duh reload` or start a new shell)"
+        "stale (run `duh-reload`, or it self-heals on the next prompt)"
     } else {
         "in sync"
     };
@@ -35,10 +36,7 @@ pub fn status(hook: bool) -> Result<()> {
         "duh: {} package(s), {} alias(es), {} export(s), {} function(s) — {}",
         c.packages, c.aliases, c.exports, c.functions, state
     );
+    let default = Prefs::load()?.packages.default;
+    println!("default package: {default}  (add/rm write here)");
     Ok(())
-}
-
-/// Force a fresh generation and emit the script.
-pub fn reload() -> Result<()> {
-    inject(true)
 }

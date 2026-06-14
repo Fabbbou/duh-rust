@@ -12,9 +12,21 @@ use std::process::Command;
 #[derive(Subcommand)]
 pub enum AddCmd {
     /// Add or update a shell alias
-    Alias { name: String, value: String },
+    Alias {
+        name: String,
+        value: String,
+        /// Also flag this alias as safe to inject over SSH
+        #[arg(long)]
+        ssh_safe: bool,
+    },
     /// Add or update an environment export
-    Export { name: String, value: String },
+    Export {
+        name: String,
+        value: String,
+        /// Also flag this export as safe to inject over SSH
+        #[arg(long)]
+        ssh_safe: bool,
+    },
     /// Create a function file and open it in $EDITOR
     Fn { name: String },
 }
@@ -22,19 +34,35 @@ pub enum AddCmd {
 pub fn run(cmd: AddCmd) -> Result<()> {
     let target = Prefs::load()?.packages.default;
     match cmd {
-        AddCmd::Alias { name, value } => {
+        AddCmd::Alias {
+            name,
+            value,
+            ssh_safe,
+        } => {
             escape::require_valid_name("alias", &name)?;
             let mut pkg = Package::load(&target)?;
             pkg.aliases.insert(name.clone(), value);
+            if ssh_safe {
+                pkg.ssh.flag_alias(&name);
+            }
             pkg.save(&target)?;
-            println!("added alias {name} to package {target}");
+            let tag = if ssh_safe { " [ssh-safe]" } else { "" };
+            println!("added alias {name}{tag} → package \"{target}\"");
         }
-        AddCmd::Export { name, value } => {
+        AddCmd::Export {
+            name,
+            value,
+            ssh_safe,
+        } => {
             escape::require_valid_name("export", &name)?;
             let mut pkg = Package::load(&target)?;
             pkg.exports.insert(name.clone(), value);
+            if ssh_safe {
+                pkg.ssh.flag_export(&name);
+            }
             pkg.save(&target)?;
-            println!("added export {name} to package {target}");
+            let tag = if ssh_safe { " [ssh-safe]" } else { "" };
+            println!("added export {name}{tag} → package \"{target}\"");
         }
         AddCmd::Fn { name } => {
             escape::require_valid_name("function", &name)?;
@@ -48,7 +76,11 @@ pub fn run(cmd: AddCmd) -> Result<()> {
                 )?;
             }
             open_editor(&file)?;
-            println!("saved function {name} in package {target}");
+            // Warn-only lint after editing.
+            for w in crate::config::package::function_lint(&file) {
+                eprintln!("warning: {w}");
+            }
+            println!("saved function {name} → package \"{target}\"");
         }
     }
     Ok(())

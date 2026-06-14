@@ -25,16 +25,18 @@ pub fn run(cmd: RmCmd) -> Result<()> {
             if pkg.aliases.remove(&name).is_none() {
                 bail!("no alias {name:?} in package {target}");
             }
+            pkg.unflag_ssh(&name);
             pkg.save(&target)?;
-            println!("removed alias {name}");
+            println!("removed alias {name} from package \"{target}\"");
         }
         RmCmd::Export { name } => {
             let mut pkg = Package::load(&target)?;
             if pkg.exports.remove(&name).is_none() {
                 bail!("no export {name:?} in package {target}");
             }
+            pkg.unflag_ssh(&name);
             pkg.save(&target)?;
-            println!("removed export {name}");
+            println!("removed export {name} from package \"{target}\"");
         }
         RmCmd::Fn { name } => {
             let file = paths::package_functions_dir(&target)?.join(format!("{name}.sh"));
@@ -42,7 +44,7 @@ pub fn run(cmd: RmCmd) -> Result<()> {
                 bail!("no function {name:?} in package {target}");
             }
             fs::remove_file(&file)?;
-            println!("removed function {name}");
+            println!("removed function {name} from package \"{target}\"");
         }
     }
     Ok(())

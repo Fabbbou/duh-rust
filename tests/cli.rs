@@ -232,7 +232,106 @@ fn uninstall_purge_deletes_everything() {
 }
 
 #[test]
-fn generated_script_is_valid_sh() {
+fn add_echoes_target_package() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["add", "alias", "ll", "ls -al"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("package \"default\""));
+}
+
+#[test]
+fn inject_includes_shell_helpers() {
+    let home = TempDir::new().unwrap();
+    let out = duh(&home).args(["inject", "--quiet"]).output().unwrap();
+    let script = String::from_utf8(out.stdout).unwrap();
+    assert!(script.contains("duh-reload()"), "missing duh-reload helper");
+    assert!(script.contains("duh-cd()"), "missing duh-cd helper");
+    assert!(
+        script.contains("duh-cd-config()"),
+        "missing duh-cd-config helper"
+    );
+}
+
+#[test]
+fn where_lists_paths() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["where"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("packages").and(predicate::str::contains("config dir")));
+}
+
+#[test]
+fn ls_package_filter_and_unknown() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["add", "alias", "ll", "ls -al"])
+        .assert()
+        .success();
+    duh(&home)
+        .args(["ls", "--package", "default"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("[default]"));
+    duh(&home)
+        .args(["ls", "--package", "nope"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no package"));
+}
+
+#[test]
+fn ssh_safe_only_filters_local_inject() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["add", "alias", "safe", "ls", "--ssh-safe"])
+        .assert()
+        .success();
+    duh(&home)
+        .args(["add", "alias", "secret", "echo s"])
+        .assert()
+        .success();
+    // Local inject shows both; ls marks the safe one.
+    duh(&home)
+        .args(["ls"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("safe").and(predicate::str::contains("[ssh-safe]")));
+    duh(&home)
+        .args(["inject", "--quiet"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("alias secret="));
+}
+
+#[test]
+fn reload_command_removed() {
+    let home = TempDir::new().unwrap();
+    duh(&home).args(["reload"]).assert().failure();
+}
+
+#[test]
+fn fn_doc_comment_shown_in_ls() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["add", "alias", "seed", "x"])
+        .assert()
+        .success();
+    let dir = home.path().join("data/packages/default/functions");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("greet.sh"), "# says hello\ngreet() { echo hi; }\n").unwrap();
+    duh(&home)
+        .args(["ls", "fn"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("greet — says hello"));
+}
+
+#[test]
+fn generated_script_is_valid_bash() {
     let home = TempDir::new().unwrap();
     duh(&home)
         .args(["add", "alias", "ll", "ls -al"])
@@ -244,8 +343,9 @@ fn generated_script_is_valid_sh() {
         .success();
     let out = duh(&home).args(["inject", "--quiet"]).output().unwrap();
     let script = String::from_utf8(out.stdout).unwrap();
-    // Pipe through `sh -n` to confirm it parses.
-    let mut sh = Command::new("sh");
+    // The local inject targets bash/zsh (where `duh init` wires it); the
+    // injected helpers use bash-valid function names. Validate with `bash -n`.
+    let mut sh = Command::new("bash");
     sh.args(["-n", "-c", &script]);
     sh.assert().success();
 }

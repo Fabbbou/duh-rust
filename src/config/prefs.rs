@@ -9,6 +9,16 @@ use std::fs;
 pub struct Prefs {
     #[serde(default)]
     pub packages: PackagePrefs,
+    #[serde(default)]
+    pub tools: ToolsPrefs,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct ToolsPrefs {
+    /// Command used by `duh open` to open a package folder (e.g. "code", "nvim").
+    /// Empty → fall back to $EDITOR, then $VISUAL.
+    #[serde(default)]
+    pub open: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
