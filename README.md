@@ -27,6 +27,16 @@ echo 'eval "$(duh init --shell zsh)"'  >> ~/.zshrc
 
 Restart your shell. Done.
 
+## Updating
+
+```sh
+duh upgrade          # update to the latest release (verifies checksum, swaps binary)
+duh upgrade --check  # just report whether a newer version exists
+```
+
+`duh upgrade` is a no-op if you're already on the latest version. (Re-running the
+install one-liner also works.)
+
 ## Migrating from the old Go `duh`
 
 Coming from the original Go version? This uninstalls the old `duh` binary and
