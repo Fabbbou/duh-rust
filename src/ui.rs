@@ -84,6 +84,11 @@ pub fn fn_name(s: &str) -> String {
     style(s).yellow().to_string()
 }
 
+/// Script (file) names: blue bold — distinct from function names.
+pub fn script_name(s: &str) -> String {
+    style(s).blue().bold().to_string()
+}
+
 /// The `(default)` package marker: green.
 pub fn default_badge() -> String {
     style("(default)").green().to_string()

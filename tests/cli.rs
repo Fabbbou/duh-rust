@@ -402,6 +402,61 @@ fn inject_syncs_package_gitconfig_include() {
 }
 
 #[test]
+fn add_git_alias_then_ls_git() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["add", "git", "alias", "co", "checkout"])
+        .assert()
+        .success();
+    duh(&home)
+        .args(["add", "git", "alias", "st", "status"])
+        .assert()
+        .success();
+    // Stored in the package gitconfig.
+    let gc = std::fs::read_to_string(home.path().join("data/packages/default/gitconfig")).unwrap();
+    assert!(gc.contains("co = checkout"), "gitconfig: {gc}");
+    // ls git shows them.
+    duh(&home)
+        .args(["ls", "git"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("co").and(predicate::str::contains("checkout")));
+    // rm removes one.
+    duh(&home)
+        .args(["rm", "git", "alias", "co"])
+        .assert()
+        .success();
+    let gc2 = std::fs::read_to_string(home.path().join("data/packages/default/gitconfig")).unwrap();
+    assert!(!gc2.contains("co = checkout"));
+    assert!(gc2.contains("st = status"));
+}
+
+#[test]
+fn completion_lists_packages_and_filters() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["add", "alias", "ll", "ls -al"])
+        .assert()
+        .success();
+    // open → package names
+    duh(&home)
+        .env("COMPLETE", "bash")
+        .env("_CLAP_COMPLETE_INDEX", "2")
+        .args(["--", "duh", "open", ""])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("default"));
+    // ls → filters
+    duh(&home)
+        .env("COMPLETE", "bash")
+        .env("_CLAP_COMPLETE_INDEX", "2")
+        .args(["--", "duh", "ls", ""])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("git").and(predicate::str::contains("alias")));
+}
+
+#[test]
 fn machine_output_has_no_ansi() {
     // The eval'd paths must never carry color codes, even if forced on.
     let home = TempDir::new().unwrap();

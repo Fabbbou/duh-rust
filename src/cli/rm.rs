@@ -15,6 +15,17 @@ pub enum RmCmd {
     Export { name: String },
     /// Remove a function file
     Fn { name: String },
+    /// Remove from the package's git config (e.g. `duh rm git alias co`)
+    Git {
+        #[command(subcommand)]
+        what: GitRmCmd,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum GitRmCmd {
+    /// Remove a git alias from the package's gitconfig
+    Alias { name: String },
 }
 
 pub fn run(cmd: RmCmd) -> Result<()> {
@@ -60,6 +71,18 @@ pub fn run(cmd: RmCmd) -> Result<()> {
                 "{}",
                 crate::ui::ok(&format!(
                     "removed function {name} from package {}",
+                    crate::ui::header(&target)
+                ))
+            );
+        }
+        RmCmd::Git {
+            what: GitRmCmd::Alias { name },
+        } => {
+            crate::config::gitcfg::remove_alias(&target, &name)?;
+            println!(
+                "{}",
+                crate::ui::ok(&format!(
+                    "removed git alias {name} from package {}",
                     crate::ui::header(&target)
                 ))
             );

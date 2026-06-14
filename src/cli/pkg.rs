@@ -6,6 +6,7 @@ use crate::config::prefs::Prefs;
 use crate::git;
 use anyhow::{bail, Context, Result};
 use clap::Subcommand;
+use clap_complete::engine::ArgValueCandidates;
 use std::fs;
 
 #[derive(Subcommand)]
@@ -17,17 +18,29 @@ pub enum PkgCmd {
         name: Option<String>,
     },
     /// Delete a local package
-    Rm { name: String },
+    Rm {
+        #[arg(add = ArgValueCandidates::new(super::complete::packages))]
+        name: String,
+    },
     /// List packages and their enabled state
     Ls,
     /// Pull updates for all enabled remote packages
     Sync,
     /// Commit and push local changes of a package
-    Push { name: String },
+    Push {
+        #[arg(add = ArgValueCandidates::new(super::complete::packages))]
+        name: String,
+    },
     /// Enable a package for injection
-    Enable { name: String },
+    Enable {
+        #[arg(add = ArgValueCandidates::new(super::complete::packages))]
+        name: String,
+    },
     /// Disable a package
-    Disable { name: String },
+    Disable {
+        #[arg(add = ArgValueCandidates::new(super::complete::packages))]
+        name: String,
+    },
 }
 
 pub fn run(cmd: PkgCmd) -> Result<()> {

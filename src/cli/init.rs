@@ -34,6 +34,8 @@ case "$PROMPT_COMMAND" in
   *__duh_hook*) ;;
   *) PROMPT_COMMAND="__duh_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}" ;;
 esac
+# tab completion
+source <(COMPLETE=bash duh)
 "#;
 
 const ZSH: &str = r#"# duh shell integration (zsh) — add to ~/.zshrc:
@@ -42,4 +44,6 @@ eval "$(duh inject --quiet)"
 __duh_hook() { eval "$(duh status --hook)"; }
 autoload -Uz add-zsh-hook
 add-zsh-hook precmd __duh_hook
+# tab completion
+source <(COMPLETE=zsh duh)
 "#;
