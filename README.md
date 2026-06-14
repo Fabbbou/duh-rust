@@ -65,6 +65,8 @@ duh rm alias ll                   # remove
 duh ls                            # list everything (shows each package + path)
 duh ls alias                      # list one kind
 duh ls --package work             # list one package
+duh ls fn                         # functions as a script → function tree, with docs
+duh ls --fn greet                 # full documentation for one function
 
 duh where                         # print every path duh uses
 duh open                          # open the default package folder in your editor

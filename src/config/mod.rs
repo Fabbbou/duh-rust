@@ -1,5 +1,6 @@
 //! Configuration: paths, packages, preferences.
 
+pub mod funcs;
 pub mod package;
 pub mod paths;
 pub mod prefs;

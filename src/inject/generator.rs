@@ -80,13 +80,14 @@ pub fn generate(opts: &GenOptions) -> Result<String> {
     if opts.include_functions {
         for name in &packages {
             for file in Package::function_files(name)? {
-                // Warn-only safety lint (skip in quiet/rc context to avoid noise
-                // on every shell start; surfaced by `duh add fn` and `duh ls`).
                 let body = fs::read_to_string(&file)?;
+                // Drop a leading shebang: scripts keep `#!/usr/bin/env bash` so
+                // they run/edit standalone, but it's noise once sourced.
+                let body = strip_shebang(&body);
                 if !opts.quiet {
                     out.push_str(&format!("# function file: {}\n", file.display()));
                 }
-                out.push_str(&body);
+                out.push_str(body);
                 if !body.ends_with('\n') {
                     out.push('\n');
                 }
@@ -123,6 +124,19 @@ fn shell_helpers(quiet: bool) -> Result<String> {
         dir = escape::single_quote(&config_dir.to_string_lossy())
     ));
     Ok(s)
+}
+
+/// Drop a leading shebang line (`#!…`) from a script body, if present. Only the
+/// first line is considered — a shebang is meaningful only as line 1.
+fn strip_shebang(body: &str) -> &str {
+    if body.starts_with("#!") {
+        match body.find('\n') {
+            Some(nl) => &body[nl + 1..],
+            None => "",
+        }
+    } else {
+        body
+    }
 }
 
 /// Reject NUL and other control characters in a value (newline excepted —

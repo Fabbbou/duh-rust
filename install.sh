@@ -19,19 +19,20 @@ err()  { printf '\033[1;31merror:\033[0m %s\n' "$1" >&2; exit 1; }
 os="$(uname -s)"
 arch="$(uname -m)"
 
+# Friendly artifact naming: duh-<os>-<arch>.
 case "$os" in
-  Linux)  os_target="unknown-linux-gnu" ;;
-  Darwin) os_target="apple-darwin" ;;
+  Linux)  os_target="linux" ;;
+  Darwin) os_target="macos" ;;
   *) err "unsupported OS: $os (Linux, macOS, and WSL are supported)" ;;
 esac
 
 case "$arch" in
   x86_64|amd64)  arch_target="x86_64" ;;
-  aarch64|arm64) arch_target="aarch64" ;;
+  aarch64|arm64) arch_target="arm64" ;;
   *) err "unsupported architecture: $arch" ;;
 esac
 
-target="${arch_target}-${os_target}"
+target="${os_target}-${arch_target}"
 
 # --- resolve version -------------------------------------------------------
 if [ "${DUH_VERSION:-}" = "" ]; then

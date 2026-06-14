@@ -50,6 +50,9 @@ enum Command {
         /// Show only this package
         #[arg(short, long)]
         package: Option<String>,
+        /// Print the full documentation for a single function
+        #[arg(short = 'f', long = "fn")]
+        func: Option<String>,
     },
     /// Manage packages (remote bundles of config)
     Pkg {
@@ -123,7 +126,11 @@ impl Cli {
         match self.command {
             Command::Add { what } => add::run(what),
             Command::Rm { what } => rm::run(what),
-            Command::Ls { kind, package } => ls::run(kind, package),
+            Command::Ls {
+                kind,
+                package,
+                func,
+            } => ls::run(kind, package, func),
             Command::Pkg { cmd } => pkg::run(cmd),
             Command::Where => where_cmd::run(),
             Command::Open { package } => open::run(package),

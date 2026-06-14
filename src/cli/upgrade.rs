@@ -86,19 +86,20 @@ fn parse_version(v: &str) -> (u32, u32, u32) {
     )
 }
 
-/// Map the compile-time platform to a release asset target triple.
+/// Map the compile-time platform to the friendly release asset name
+/// (`duh-<os>-<arch>`), matching the release workflow's artifact labels.
 fn asset_target() -> Result<String> {
     let arch = match std::env::consts::ARCH {
         "x86_64" => "x86_64",
-        "aarch64" => "aarch64",
+        "aarch64" => "arm64",
         other => bail!("no prebuilt binary for arch {other}; build from source"),
     };
     let os = match std::env::consts::OS {
-        "linux" => "unknown-linux-gnu",
-        "macos" => "apple-darwin",
+        "linux" => "linux",
+        "macos" => "macos",
         other => bail!("no prebuilt binary for OS {other}; build from source"),
     };
-    Ok(format!("{arch}-{os}"))
+    Ok(format!("{os}-{arch}"))
 }
 
 /// Fetch the latest release tag via the GitHub API.
