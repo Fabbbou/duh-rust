@@ -7,6 +7,7 @@ mod pkg;
 mod rm;
 mod ssh;
 mod status;
+mod uninstall;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -78,13 +79,25 @@ enum Command {
         #[arg(last = true)]
         ssh_args: Vec<String>,
     },
+    /// Remove duh: deletes the binary, cache, and (with confirmation) packages
+    Uninstall {
+        /// Skip confirmation prompts (keeps packages unless --purge)
+        #[arg(long, short)]
+        yes: bool,
+        /// Also delete all local packages and config without prompting
+        #[arg(long)]
+        purge: bool,
+    },
 }
 
 impl Cli {
     pub fn dispatch(self) -> Result<()> {
         // The per-prompt hook must stay stat-only: never bootstrap there.
-        let is_hook = matches!(self.command, Command::Status { hook: true });
-        if !is_hook {
+        let skip_bootstrap = matches!(
+            self.command,
+            Command::Status { hook: true } | Command::Uninstall { .. }
+        );
+        if !skip_bootstrap {
             config::bootstrap()?;
         }
         match self.command {
@@ -101,6 +114,7 @@ impl Cli {
                 cleanup,
                 ssh_args,
             } => ssh::run(&host, cleanup, &ssh_args),
+            Command::Uninstall { yes, purge } => uninstall::run(yes, purge),
         }
     }
 }

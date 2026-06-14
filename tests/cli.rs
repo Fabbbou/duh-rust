@@ -178,6 +178,60 @@ fn init_emits_shell_snippet() {
 }
 
 #[test]
+fn uninstall_yes_keeps_packages_removes_cache() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["add", "alias", "ll", "ls -al"])
+        .assert()
+        .success();
+    duh(&home).args(["inject", "--quiet"]).assert().success();
+    assert!(home.path().join("cache").exists());
+
+    duh(&home)
+        .env("DUH_KEEP_BINARY", "1")
+        .args(["uninstall", "--yes"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("kept packages"));
+
+    assert!(
+        !home.path().join("cache").exists(),
+        "cache should be removed"
+    );
+    assert!(home.path().join("data").exists(), "packages should be kept");
+}
+
+#[test]
+fn uninstall_purge_deletes_everything() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["add", "alias", "ll", "ls -al"])
+        .assert()
+        .success();
+    duh(&home).args(["inject", "--quiet"]).assert().success();
+
+    duh(&home)
+        .env("DUH_KEEP_BINARY", "1")
+        .args(["uninstall", "--purge"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("removed packages"));
+
+    assert!(
+        !home.path().join("data").exists(),
+        "packages should be deleted"
+    );
+    assert!(
+        !home.path().join("config").exists(),
+        "config should be deleted"
+    );
+    assert!(
+        !home.path().join("cache").exists(),
+        "cache should be deleted"
+    );
+}
+
+#[test]
 fn generated_script_is_valid_sh() {
     let home = TempDir::new().unwrap();
     duh(&home)

@@ -27,6 +27,23 @@ echo 'eval "$(duh init --shell zsh)"'  >> ~/.zshrc
 
 Restart your shell. Done.
 
+## Uninstall
+
+```sh
+duh uninstall          # prompts whether to also delete local packages
+duh uninstall --purge  # delete binary, cache, packages, and config (no prompt)
+```
+
+Or without the binary on hand, the one-liner:
+
+```sh
+curl -sSL https://raw.githubusercontent.com/Fabbbou/duh-rust/main/uninstall.sh | sh
+```
+
+Both keep your packages by default and ask before deleting them (the script keeps
+them when piped non-interactively — set `DUH_PURGE=1` to delete, `DUH_KEEP=1` to
+keep). Remember to remove the `eval "$(duh init ...)"` line from your shell rc.
+
 ## Usage
 
 ```sh
