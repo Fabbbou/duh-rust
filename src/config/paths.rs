@@ -1,7 +1,7 @@
 //! Filesystem path resolution (XDG via `directories`, overridable for tests).
 
 use anyhow::{bail, Context, Result};
-use directories::ProjectDirs;
+use directories::{BaseDirs, ProjectDirs};
 use std::path::PathBuf;
 
 /// Validate a package name before it is ever joined onto a filesystem path.
@@ -83,6 +83,20 @@ pub fn package_db(name: &str) -> Result<PathBuf> {
 /// `functions/` directory for a package.
 pub fn package_functions_dir(name: &str) -> Result<PathBuf> {
     Ok(package_dir(name)?.join("functions"))
+}
+
+/// Per-package git config file (included into `~/.gitconfig` at inject time).
+pub fn package_gitconfig(name: &str) -> Result<PathBuf> {
+    Ok(package_dir(name)?.join("gitconfig"))
+}
+
+/// The user's `~/.gitconfig`. Honors `DUH_GITCONFIG` (test isolation).
+pub fn git_config_path() -> Result<PathBuf> {
+    if let Some(p) = std::env::var_os("DUH_GITCONFIG") {
+        return Ok(PathBuf::from(p));
+    }
+    let base = BaseDirs::new().context("could not determine home directory")?;
+    Ok(base.home_dir().join(".gitconfig"))
 }
 
 /// User preferences file.

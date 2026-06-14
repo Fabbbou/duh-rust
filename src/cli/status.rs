@@ -13,6 +13,19 @@ pub fn inject(quiet: bool) -> Result<()> {
         ..Default::default()
     })?;
     cache::write(&script)?;
+
+    // Sync per-package gitconfig includes into ~/.gitconfig (local only — never
+    // over SSH). Errors go to STDERR so stdout stays clean for `eval`.
+    match crate::inject::gitinc::sync_enabled() {
+        Ok(added) if !added.is_empty() && !quiet => {
+            for p in added {
+                eprintln!("{}", ui::ok(&format!("git: included {}", p.display())));
+            }
+        }
+        Err(e) => eprintln!("{}", ui::warn(&format!("gitconfig include sync: {e:#}"))),
+        _ => {}
+    }
+
     print!("{script}");
     Ok(())
 }
