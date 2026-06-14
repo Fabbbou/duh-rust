@@ -25,7 +25,8 @@ echo 'eval "$(duh init --shell bash)"' >> ~/.bashrc
 echo 'eval "$(duh init --shell zsh)"'  >> ~/.zshrc
 ```
 
-Restart your shell. Done.
+Restart your shell. Done. The `duh init` snippet also enables **tab completion**
+(dynamic — `duh open <tab>` lists packages, `duh ls <tab>` lists filters, etc.).
 
 ## Updating
 
@@ -67,6 +68,10 @@ duh ls alias                      # list one kind
 duh ls --package work             # list one package
 duh ls fn                         # functions as a script → function tree, with docs
 duh ls --fn greet                 # full documentation for one function
+duh ls git                        # git aliases per package (from each gitconfig)
+
+duh add git alias co checkout     # add a git alias to the package gitconfig
+duh rm  git alias co              # remove it
 
 duh where                         # print every path duh uses
 duh open                          # open the default package folder in your editor

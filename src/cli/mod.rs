@@ -1,6 +1,7 @@
 //! CLI surface and dispatch.
 
 mod add;
+mod complete;
 mod init;
 mod ls;
 mod open;
@@ -14,6 +15,7 @@ mod where_cmd;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use clap_complete::engine::ArgValueCandidates;
 
 #[derive(Parser)]
 #[command(
@@ -54,10 +56,10 @@ enum Command {
         /// Optional filter: alias | export | fn
         kind: Option<ls::Kind>,
         /// Show only this package
-        #[arg(short, long)]
+        #[arg(short, long, add = ArgValueCandidates::new(complete::packages))]
         package: Option<String>,
         /// Print the full documentation for a single function
-        #[arg(short = 'f', long = "fn")]
+        #[arg(short = 'f', long = "fn", add = ArgValueCandidates::new(complete::functions))]
         func: Option<String>,
         /// Output machine-readable JSON
         #[arg(long)]
@@ -73,6 +75,7 @@ enum Command {
     /// Open a package folder with your configured tool (vscode, nvim, …)
     Open {
         /// Package to open (defaults to the default package)
+        #[arg(add = ArgValueCandidates::new(complete::packages))]
         package: Option<String>,
     },
     /// Emit the generated alias/export/function script (run on every shell start
@@ -100,6 +103,7 @@ enum Command {
     /// SSH to a host with your config injected
     Ssh {
         /// Target host (e.g. user@host)
+        #[arg(add = ArgValueCandidates::new(complete::ssh_hosts))]
         host: String,
         /// Remove the injected snippet from the remote after the session
         #[arg(long)]

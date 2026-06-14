@@ -1,6 +1,6 @@
 [package]
 name = "duh"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 rust-version = "1.74"
 description = "Inject your shell config (aliases, exports, functions) everywhere — fast, direnv-style"
@@ -28,6 +28,7 @@ brush-parser = "0.2.5"
 serde_json = "1.0.150"
 console = "0.16.3"
 libc = "0.2.186"
+clap_complete = { version = "4.5.67", features = ["unstable-dynamic"] }
 
 [dev-dependencies]
 assert_cmd = "2"

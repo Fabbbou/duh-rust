@@ -1,6 +1,7 @@
 //! `duh ls [alias|export|fn] [--package <name>] [--fn <name>] [--json]`
 
 use crate::config::funcs;
+use crate::config::gitcfg;
 use crate::config::package::{self, Package};
 use crate::config::paths;
 use crate::config::prefs::Prefs;
@@ -13,6 +14,7 @@ pub enum Kind {
     Alias,
     Export,
     Fn,
+    Git,
 }
 
 pub fn run(
@@ -35,15 +37,28 @@ pub fn run(
     let show_alias = matches!(kind, None | Some(Kind::Alias));
     let show_export = matches!(kind, None | Some(Kind::Export));
     let show_fn = matches!(kind, None | Some(Kind::Fn));
+    let show_git = matches!(kind, None | Some(Kind::Git));
 
     if json {
-        return list_json(&prefs, &packages, show_alias, show_export, show_fn);
+        return list_json(
+            &prefs,
+            &packages,
+            show_alias,
+            show_export,
+            show_fn,
+            show_git,
+        );
     }
 
     for name in &packages {
         let pkg = Package::load(name)?;
         let files = Package::function_files(name)?;
-        if pkg.aliases.is_empty() && pkg.exports.is_empty() && files.is_empty() {
+        let git = if show_git {
+            gitcfg::aliases(name)?
+        } else {
+            Vec::new()
+        };
+        if pkg.aliases.is_empty() && pkg.exports.is_empty() && files.is_empty() && git.is_empty() {
             continue;
         }
 
@@ -60,27 +75,27 @@ pub fn run(
             ui::dim(&paths::package_dir(name)?.display().to_string())
         );
 
-        // Build the flat list of top-level rows (aliases, exports, scripts) so we
-        // can pick the right tree connector for the last one.
+        // Count top-level rows so the last gets `└─`.
         let n_alias = if show_alias { pkg.aliases.len() } else { 0 };
         let n_export = if show_export { pkg.exports.len() } else { 0 };
+        let n_git = git.len();
         let n_files = if show_fn { files.len() } else { 0 };
-        let total_rows = n_alias + n_export + n_files;
+        let total_rows = n_alias + n_export + n_git + n_files;
         let mut row = 0usize;
 
-        // Column width for alias/export names within this package.
+        // Align the value column across alias/export/git names.
         let name_w = pkg
             .aliases
             .keys()
             .chain(pkg.exports.keys())
             .map(|k| k.len())
+            .chain(git.iter().map(|(k, _)| k.len()))
             .max()
             .unwrap_or(0);
 
         if show_alias {
             for (k, v) in &pkg.aliases {
                 row += 1;
-                let conn = connector(row, total_rows);
                 let tag = if pkg.ssh.alias_ok(k) {
                     format!("  {}", ui::badge_ssh())
                 } else {
@@ -88,7 +103,7 @@ pub fn run(
                 };
                 println!(
                     "  {} {} {:<name_w$}  {} {}{}",
-                    conn,
+                    connector(row, total_rows),
                     ui::dim("alias "),
                     k,
                     ui::arrow(),
@@ -100,7 +115,6 @@ pub fn run(
         if show_export {
             for (k, v) in &pkg.exports {
                 row += 1;
-                let conn = connector(row, total_rows);
                 let tag = if pkg.ssh.export_ok(k) {
                     format!("  {}", ui::badge_ssh())
                 } else {
@@ -108,7 +122,7 @@ pub fn run(
                 };
                 println!(
                     "  {} {} {:<name_w$}  {} {}{}",
-                    conn,
+                    connector(row, total_rows),
                     ui::dim("export"),
                     k,
                     ui::arrow(),
@@ -117,16 +131,30 @@ pub fn run(
                 );
             }
         }
+        for (k, v) in &git {
+            row += 1;
+            println!(
+                "  {} {} {:<name_w$}  {} {}",
+                connector(row, total_rows),
+                ui::dim("git   "),
+                k,
+                ui::arrow(),
+                v
+            );
+        }
         if show_fn {
             for f in &files {
                 row += 1;
                 let last_file = row == total_rows;
-                let conn = connector(row, total_rows);
                 let script = f.file_name().and_then(|s| s.to_str()).unwrap_or("?");
-                println!("  {} {}", conn, ui::fn_name(script));
+                println!(
+                    "  {} {} {}",
+                    connector(row, total_rows),
+                    ui::dim("script"),
+                    ui::script_name(script)
+                );
 
-                // Indent for functions nested under this script: continue the
-                // parent's vertical bar unless the script was the last row.
+                // Continue the parent's vertical bar unless it was the last row.
                 let cont = if last_file { " " } else { ui::pipe() };
                 let defs = funcs::parse_functions(f);
                 if defs.is_empty() {
@@ -137,13 +165,20 @@ pub fn run(
                     let fconn = connector(i + 1, defs.len());
                     match d.summary() {
                         Some(s) => println!(
-                            "  {}  {} {:<fn_w$}  {}",
+                            "  {}  {} {} {:<fn_w$}  {}",
                             cont,
                             fconn,
+                            ui::dim("fn"),
                             ui::fn_name(&d.name),
                             ui::dim(s)
                         ),
-                        None => println!("  {}  {} {}", cont, fconn, ui::fn_name(&d.name)),
+                        None => println!(
+                            "  {}  {} {} {}",
+                            cont,
+                            fconn,
+                            ui::dim("fn"),
+                            ui::fn_name(&d.name)
+                        ),
                     }
                 }
             }
@@ -222,6 +257,7 @@ fn list_json(
     show_alias: bool,
     show_export: bool,
     show_fn: bool,
+    show_git: bool,
 ) -> Result<()> {
     let mut out = Vec::new();
     for name in packages {
@@ -257,6 +293,19 @@ fn list_json(
                 }
             }
         }
+        let git: Vec<_> = if show_git {
+            gitcfg::aliases(name)?
+                .into_iter()
+                .map(|(k, v)| serde_json::json!({"name": k, "value": v}))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let gitconfig = if gitcfg::has_gitconfig(name) {
+            serde_json::Value::String(paths::package_gitconfig(name)?.display().to_string())
+        } else {
+            serde_json::Value::Null
+        };
         out.push(serde_json::json!({
             "name": name,
             "default": prefs.packages.default == *name,
@@ -264,6 +313,8 @@ fn list_json(
             "aliases": aliases,
             "exports": exports,
             "functions": functions,
+            "git": git,
+            "gitconfig": gitconfig,
         }));
     }
     println!(
