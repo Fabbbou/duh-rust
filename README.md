@@ -106,6 +106,22 @@ duh pkg enable dotfiles / duh pkg disable …
 Later-enabled packages override earlier ones, so a personal package can shadow a
 shared one.
 
+### Git config per package
+
+Drop a `gitconfig` file in a package directory (next to its `db.toml`) and duh
+wires it into your `~/.gitconfig` via git's `[include]` mechanism on the next
+inject — so a package can ship git aliases/settings:
+
+```ini
+# ~/.gitconfig (after inject)
+[include]
+        path = /home/you/.local/share/duh/packages/default/gitconfig
+        path = /home/you/.local/share/duh/packages/work/gitconfig
+```
+
+Add-only and idempotent (never duplicates a line, never removes your own
+includes); enabled packages only; never shipped over SSH.
+
 ### SSH injection
 
 SSH injection is **opt-in**: only entries you flag are ever shipped to a remote.

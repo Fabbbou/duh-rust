@@ -3,3 +3,4 @@
 pub mod cache;
 pub mod escape;
 pub mod generator;
+pub mod gitinc;

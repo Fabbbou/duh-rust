@@ -10,6 +10,8 @@ fn duh(home: &TempDir) -> Command {
     cmd.env("DUH_DATA_DIR", home.path().join("data"));
     cmd.env("DUH_CONFIG_DIR", home.path().join("config"));
     cmd.env("DUH_CACHE_DIR", home.path().join("cache"));
+    // Isolate ~/.gitconfig so the include-sync never touches the real one.
+    cmd.env("DUH_GITCONFIG", home.path().join("gitconfig"));
     cmd
 }
 
@@ -353,6 +355,50 @@ fn fn_doc_comment_shown_in_ls() {
         .assert()
         .success()
         .stdout(predicate::str::contains("greet").and(predicate::str::contains("says hello")));
+}
+
+#[test]
+fn inject_syncs_package_gitconfig_include() {
+    let home = TempDir::new().unwrap();
+    let gitconfig = home.path().join("dot.gitconfig");
+    // Pre-existing user include must be preserved.
+    std::fs::write(
+        &gitconfig,
+        "[include]\n\tpath = /home/me/.dotfiles/gitconfig\n",
+    )
+    .unwrap();
+
+    // Package with a gitconfig file.
+    duh(&home)
+        .args(["add", "alias", "seed", "x"])
+        .assert()
+        .success();
+    let pkg_gc = home.path().join("data/packages/default/gitconfig");
+    std::fs::write(&pkg_gc, "[alias]\n\tco = checkout\n").unwrap();
+
+    let run = || {
+        duh(&home)
+            .env("DUH_GITCONFIG", &gitconfig)
+            .args(["inject", "--quiet"])
+            .assert()
+            .success();
+    };
+    run();
+    let after = std::fs::read_to_string(&gitconfig).unwrap();
+    assert!(
+        after.contains("/home/me/.dotfiles/gitconfig"),
+        "existing include preserved"
+    );
+    assert!(
+        after.contains(&pkg_gc.display().to_string()),
+        "package gitconfig included"
+    );
+
+    // Idempotent: second inject must not duplicate the line.
+    run();
+    let twice = std::fs::read_to_string(&gitconfig).unwrap();
+    let count = twice.matches(&pkg_gc.display().to_string()).count();
+    assert_eq!(count, 1, "include line must not be duplicated");
 }
 
 #[test]
