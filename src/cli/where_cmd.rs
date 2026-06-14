@@ -1,6 +1,7 @@
 //! `duh where` — print every filesystem location duh uses.
 
 use crate::config::paths;
+use crate::ui;
 use anyhow::Result;
 
 pub fn run() -> Result<()> {
@@ -15,10 +16,16 @@ pub fn run() -> Result<()> {
     ];
     let width = rows.iter().map(|(k, _)| k.len()).max().unwrap_or(0);
     for (label, path) in rows {
-        let mark = if path.exists() { " " } else { "✗" };
-        println!("{mark} {label:<width$}  {}", path.display());
+        println!(
+            "{} {:<width$}  {}",
+            ui::mark(path.exists()),
+            label,
+            ui::dim(&path.display().to_string())
+        );
     }
-    println!("\n(✗ = not created yet)");
-    println!("shortcuts: `duh-cd` → packages, `duh-cd-config` → config (after a shell reload)");
+    println!(
+        "\n{}",
+        ui::dim("shortcuts: `duh-cd` → packages, `duh-cd-config` → config (after a shell reload)")
+    );
     Ok(())
 }

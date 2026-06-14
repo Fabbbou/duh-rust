@@ -1,9 +1,10 @@
-//! `duh ls [alias|export|fn] [--package <name>] [--fn <name>]`
+//! `duh ls [alias|export|fn] [--package <name>] [--fn <name>] [--json]`
 
 use crate::config::funcs;
 use crate::config::package::{self, Package};
 use crate::config::paths;
 use crate::config::prefs::Prefs;
+use crate::ui;
 use anyhow::{bail, Result};
 use clap::ValueEnum;
 
@@ -14,18 +15,30 @@ pub enum Kind {
     Fn,
 }
 
-pub fn run(kind: Option<Kind>, package: Option<String>, func: Option<String>) -> Result<()> {
+pub fn run(
+    kind: Option<Kind>,
+    package: Option<String>,
+    func: Option<String>,
+    json: bool,
+) -> Result<()> {
     let prefs = Prefs::load()?;
     let packages = resolve_packages(&prefs, package)?;
 
-    // `--fn <name>`: full doc for one function, wherever it lives.
     if let Some(name) = func {
-        return show_function(&packages, &name);
+        return if json {
+            show_function_json(&packages, &name)
+        } else {
+            show_function(&packages, &name)
+        };
     }
 
     let show_alias = matches!(kind, None | Some(Kind::Alias));
     let show_export = matches!(kind, None | Some(Kind::Export));
     let show_fn = matches!(kind, None | Some(Kind::Fn));
+
+    if json {
+        return list_json(&prefs, &packages, show_alias, show_export, show_fn);
+    }
 
     for name in &packages {
         let pkg = Package::load(name)?;
@@ -33,37 +46,104 @@ pub fn run(kind: Option<Kind>, package: Option<String>, func: Option<String>) ->
         if pkg.aliases.is_empty() && pkg.exports.is_empty() && files.is_empty() {
             continue;
         }
-        let path = paths::package_dir(name)?;
-        let active = if prefs.packages.default == *name {
-            " (default)"
+
+        // Header: ● name (default)
+        let is_default = prefs.packages.default == *name;
+        let badge = if is_default {
+            format!(" {}", ui::default_badge())
         } else {
-            ""
+            String::new()
         };
-        println!("[{name}]{active}  {}", path.display());
+        println!("{} {}{}", ui::dot(), ui::header(name), badge);
+        println!(
+            "  {}",
+            ui::dim(&paths::package_dir(name)?.display().to_string())
+        );
+
+        // Build the flat list of top-level rows (aliases, exports, scripts) so we
+        // can pick the right tree connector for the last one.
+        let n_alias = if show_alias { pkg.aliases.len() } else { 0 };
+        let n_export = if show_export { pkg.exports.len() } else { 0 };
+        let n_files = if show_fn { files.len() } else { 0 };
+        let total_rows = n_alias + n_export + n_files;
+        let mut row = 0usize;
+
+        // Column width for alias/export names within this package.
+        let name_w = pkg
+            .aliases
+            .keys()
+            .chain(pkg.exports.keys())
+            .map(|k| k.len())
+            .max()
+            .unwrap_or(0);
 
         if show_alias {
             for (k, v) in &pkg.aliases {
-                println!("  alias  {k} = {v}{}", ssh_tag(pkg.ssh.alias_ok(k)));
+                row += 1;
+                let conn = connector(row, total_rows);
+                let tag = if pkg.ssh.alias_ok(k) {
+                    format!("  {}", ui::badge_ssh())
+                } else {
+                    String::new()
+                };
+                println!(
+                    "  {} {} {:<name_w$}  {} {}{}",
+                    conn,
+                    ui::dim("alias "),
+                    k,
+                    ui::arrow(),
+                    v,
+                    tag
+                );
             }
         }
         if show_export {
             for (k, v) in &pkg.exports {
-                println!("  export {k} = {v}{}", ssh_tag(pkg.ssh.export_ok(k)));
+                row += 1;
+                let conn = connector(row, total_rows);
+                let tag = if pkg.ssh.export_ok(k) {
+                    format!("  {}", ui::badge_ssh())
+                } else {
+                    String::new()
+                };
+                println!(
+                    "  {} {} {:<name_w$}  {} {}{}",
+                    conn,
+                    ui::dim("export"),
+                    k,
+                    ui::arrow(),
+                    v,
+                    tag
+                );
             }
         }
-        if show_fn && !files.is_empty() {
-            println!("  functions:");
+        if show_fn {
             for f in &files {
+                row += 1;
+                let last_file = row == total_rows;
+                let conn = connector(row, total_rows);
                 let script = f.file_name().and_then(|s| s.to_str()).unwrap_or("?");
-                println!("    {script}");
+                println!("  {} {}", conn, ui::fn_name(script));
+
+                // Indent for functions nested under this script: continue the
+                // parent's vertical bar unless the script was the last row.
+                let cont = if last_file { " " } else { ui::pipe() };
                 let defs = funcs::parse_functions(f);
                 if defs.is_empty() {
-                    println!("      (no functions found)");
+                    println!("  {}    {}", cont, ui::dim("(no functions found)"));
                 }
-                for d in defs {
+                let fn_w = defs.iter().map(|d| d.name.len()).max().unwrap_or(0);
+                for (i, d) in defs.iter().enumerate() {
+                    let fconn = connector(i + 1, defs.len());
                     match d.summary() {
-                        Some(s) => println!("      {} — {s}", d.name),
-                        None => println!("      {}", d.name),
+                        Some(s) => println!(
+                            "  {}  {} {:<fn_w$}  {}",
+                            cont,
+                            fconn,
+                            ui::fn_name(&d.name),
+                            ui::dim(s)
+                        ),
+                        None => println!("  {}  {} {}", cont, fconn, ui::fn_name(&d.name)),
                     }
                 }
             }
@@ -72,7 +152,15 @@ pub fn run(kind: Option<Kind>, package: Option<String>, func: Option<String>) ->
     Ok(())
 }
 
-/// Resolve which packages to list: a single named one, else enabled, else all.
+/// Tree connector: `└─` for the last row, `├─` otherwise.
+fn connector(idx: usize, total: usize) -> &'static str {
+    if idx >= total {
+        ui::ell()
+    } else {
+        ui::tee()
+    }
+}
+
 fn resolve_packages(prefs: &Prefs, package: Option<String>) -> Result<Vec<String>> {
     match package {
         Some(name) => {
@@ -92,7 +180,6 @@ fn resolve_packages(prefs: &Prefs, package: Option<String>) -> Result<Vec<String
     }
 }
 
-/// Print the full doc block for a named function across the given packages.
 fn show_function(packages: &[String], name: &str) -> Result<()> {
     let mut found = false;
     for pkg in packages {
@@ -100,11 +187,14 @@ fn show_function(packages: &[String], name: &str) -> Result<()> {
             for d in funcs::parse_functions(&file) {
                 if d.name == name {
                     found = true;
-                    let script = file.file_name().and_then(|s| s.to_str()).unwrap_or("?");
-                    println!("{} [{pkg}] {}", d.name, file.display());
-                    println!("  script: {script}");
+                    println!(
+                        "{} {}  {}",
+                        ui::fn_name(&d.name),
+                        ui::dim(&format!("[{pkg}]")),
+                        ui::dim(&file.display().to_string())
+                    );
                     if d.doc.is_empty() {
-                        println!("  (no documentation)");
+                        println!("  {}", ui::dim("(no documentation)"));
                     } else {
                         for line in &d.doc {
                             println!("  {line}");
@@ -124,10 +214,83 @@ fn show_function(packages: &[String], name: &str) -> Result<()> {
     Ok(())
 }
 
-fn ssh_tag(ok: bool) -> &'static str {
-    if ok {
-        "  [ssh-safe]"
-    } else {
-        ""
+// --- JSON output (never colored) -------------------------------------------
+
+fn list_json(
+    prefs: &Prefs,
+    packages: &[String],
+    show_alias: bool,
+    show_export: bool,
+    show_fn: bool,
+) -> Result<()> {
+    let mut out = Vec::new();
+    for name in packages {
+        let pkg = Package::load(name)?;
+        let aliases: Vec<_> = if show_alias {
+            pkg.aliases
+                .iter()
+                .map(|(k, v)| {
+                    serde_json::json!({"name": k, "value": v, "ssh_safe": pkg.ssh.alias_ok(k)})
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let exports: Vec<_> = if show_export {
+            pkg.exports
+                .iter()
+                .map(|(k, v)| {
+                    serde_json::json!({"name": k, "value": v, "ssh_safe": pkg.ssh.export_ok(k)})
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let mut functions = Vec::new();
+        if show_fn {
+            for f in Package::function_files(name)? {
+                let script = f.file_name().and_then(|s| s.to_str()).unwrap_or("?");
+                for d in funcs::parse_functions(&f) {
+                    functions.push(serde_json::json!({
+                        "script": script, "name": d.name, "doc": d.doc.join("\n")
+                    }));
+                }
+            }
+        }
+        out.push(serde_json::json!({
+            "name": name,
+            "default": prefs.packages.default == *name,
+            "path": paths::package_dir(name)?.display().to_string(),
+            "aliases": aliases,
+            "exports": exports,
+            "functions": functions,
+        }));
     }
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({ "packages": out }))?
+    );
+    Ok(())
+}
+
+fn show_function_json(packages: &[String], name: &str) -> Result<()> {
+    let mut matches = Vec::new();
+    for pkg in packages {
+        for file in Package::function_files(pkg)? {
+            let script = file.file_name().and_then(|s| s.to_str()).unwrap_or("?");
+            for d in funcs::parse_functions(&file) {
+                if d.name == name {
+                    matches.push(serde_json::json!({
+                        "name": d.name, "package": pkg, "script": script,
+                        "path": file.display().to_string(), "doc": d.doc.join("\n"),
+                    }));
+                }
+            }
+        }
+    }
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({ "functions": matches }))?
+    );
+    Ok(())
 }

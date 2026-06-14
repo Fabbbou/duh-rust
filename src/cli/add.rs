@@ -47,7 +47,13 @@ pub fn run(cmd: AddCmd) -> Result<()> {
             }
             pkg.save(&target)?;
             let tag = if ssh_safe { " [ssh-safe]" } else { "" };
-            println!("added alias {name}{tag} → package \"{target}\"");
+            println!(
+                "{}",
+                crate::ui::ok(&format!(
+                    "added alias {name}{tag} → package {}",
+                    crate::ui::header(&target)
+                ))
+            );
         }
         AddCmd::Export {
             name,
@@ -62,7 +68,13 @@ pub fn run(cmd: AddCmd) -> Result<()> {
             }
             pkg.save(&target)?;
             let tag = if ssh_safe { " [ssh-safe]" } else { "" };
-            println!("added export {name}{tag} → package \"{target}\"");
+            println!(
+                "{}",
+                crate::ui::ok(&format!(
+                    "added export {name}{tag} → package {}",
+                    crate::ui::header(&target)
+                ))
+            );
         }
         AddCmd::Fn { name } => {
             escape::require_valid_name("function", &name)?;
@@ -78,9 +90,15 @@ pub fn run(cmd: AddCmd) -> Result<()> {
             open_editor(&file)?;
             // Warn-only lint after editing.
             for w in crate::config::package::function_lint(&file) {
-                eprintln!("warning: {w}");
+                eprintln!("{}", crate::ui::warn(&w));
             }
-            println!("saved function {name} → package \"{target}\"");
+            println!(
+                "{}",
+                crate::ui::ok(&format!(
+                    "saved function {name} → package {}",
+                    crate::ui::header(&target)
+                ))
+            );
         }
     }
     Ok(())

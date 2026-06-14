@@ -66,15 +66,21 @@ pub fn run(host: &str, cleanup: bool, ssh_args: &[String]) -> Result<()> {
 
     if include_functions {
         eprintln!(
-            "warning: inject_functions=true for {host} — ALL function bodies in the \
-             selected packages are shipped unfiltered (the ssh-safe allowlist covers \
-             aliases/exports only). Use only with trusted packages. See docs/ssh.md."
+            "{}",
+            crate::ui::warn(&format!(
+                "inject_functions=true for {host} — ALL function bodies in the selected \
+                 packages are shipped unfiltered (the ssh-safe allowlist covers \
+                 aliases/exports only). Use only with trusted packages. See docs/ssh.md."
+            ))
         );
     }
     if snippet.trim().is_empty() {
         eprintln!(
-            "note: nothing flagged ssh-safe — connecting without injection.\n  \
-             Flag entries with `duh add alias <n> <v> --ssh-safe`. See `duh where` and docs/ssh.md."
+            "{}",
+            crate::ui::dim(
+                "note: nothing flagged ssh-safe — connecting without injection.\n  \
+                 Flag entries with `duh add alias <n> <v> --ssh-safe`. See `duh where` and docs/ssh.md."
+            )
         );
     }
 

@@ -27,6 +27,12 @@ use clap::{Parser, Subcommand};
                   wiring runs on each shell start (you rarely call it directly)."
 )]
 pub struct Cli {
+    /// Disable colored output
+    #[arg(long, global = true)]
+    no_color: bool,
+    /// Plain output: no color and ASCII-only glyphs (max compatibility)
+    #[arg(long, global = true)]
+    plain: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -53,6 +59,9 @@ enum Command {
         /// Print the full documentation for a single function
         #[arg(short = 'f', long = "fn")]
         func: Option<String>,
+        /// Output machine-readable JSON
+        #[arg(long)]
+        json: bool,
     },
     /// Manage packages (remote bundles of config)
     Pkg {
@@ -78,6 +87,9 @@ enum Command {
         /// Per-prompt mode: stat-only, prints reload command when stale
         #[arg(long)]
         hook: bool,
+        /// Output machine-readable JSON (ignored with --hook)
+        #[arg(long)]
+        json: bool,
     },
     /// Print the one-time shell rc wiring (run once: add `eval "$(duh init)"`)
     Init {
@@ -115,10 +127,13 @@ enum Command {
 
 impl Cli {
     pub fn dispatch(self) -> Result<()> {
+        crate::ui::init(self.no_color, self.plain);
         // The per-prompt hook must stay stat-only: never bootstrap there.
         let skip_bootstrap = matches!(
             self.command,
-            Command::Status { hook: true } | Command::Uninstall { .. } | Command::Upgrade { .. }
+            Command::Status { hook: true, .. }
+                | Command::Uninstall { .. }
+                | Command::Upgrade { .. }
         );
         if !skip_bootstrap {
             config::bootstrap()?;
@@ -130,12 +145,13 @@ impl Cli {
                 kind,
                 package,
                 func,
-            } => ls::run(kind, package, func),
+                json,
+            } => ls::run(kind, package, func, json),
             Command::Pkg { cmd } => pkg::run(cmd),
             Command::Where => where_cmd::run(),
             Command::Open { package } => open::run(package),
             Command::Inject { quiet } => status::inject(quiet),
-            Command::Status { hook } => status::status(hook),
+            Command::Status { hook, json } => status::status(hook, json),
             Command::Init { shell } => init::run(shell),
             Command::Ssh {
                 host,

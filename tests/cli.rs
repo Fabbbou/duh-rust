@@ -263,7 +263,7 @@ fn add_echoes_target_package() {
         .args(["add", "alias", "ll", "ls -al"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("package \"default\""));
+        .stdout(predicate::str::contains("package default"));
 }
 
 #[test]
@@ -300,7 +300,7 @@ fn ls_package_filter_and_unknown() {
         .args(["ls", "--package", "default"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("[default]"));
+        .stdout(predicate::str::contains("default").and(predicate::str::contains("ls -al")));
     duh(&home)
         .args(["ls", "--package", "nope"])
         .assert()
@@ -324,7 +324,7 @@ fn ssh_safe_only_filters_local_inject() {
         .args(["ls"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("safe").and(predicate::str::contains("[ssh-safe]")));
+        .stdout(predicate::str::contains("safe").and(predicate::str::contains("ssh-safe")));
     duh(&home)
         .args(["inject", "--quiet"])
         .assert()
@@ -352,7 +352,69 @@ fn fn_doc_comment_shown_in_ls() {
         .args(["ls", "fn"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("greet — says hello"));
+        .stdout(predicate::str::contains("greet").and(predicate::str::contains("says hello")));
+}
+
+#[test]
+fn machine_output_has_no_ansi() {
+    // The eval'd paths must never carry color codes, even if forced on.
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["add", "alias", "ll", "ls -al"])
+        .assert()
+        .success();
+    for args in [
+        vec!["inject", "--quiet"],
+        vec!["status", "--hook"],
+        vec!["init", "--shell", "bash"],
+    ] {
+        let out = duh(&home).args(&args).output().unwrap();
+        let s = String::from_utf8_lossy(&out.stdout);
+        assert!(!s.contains('\u{1b}'), "{args:?} emitted an ANSI escape");
+    }
+}
+
+#[test]
+fn ls_json_is_valid_and_uncolored() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["add", "alias", "ll", "ls -al", "--ssh-safe"])
+        .assert()
+        .success();
+    let out = duh(&home).args(["ls", "--json"]).output().unwrap();
+    let s = String::from_utf8(out.stdout).unwrap();
+    assert!(!s.contains('\u{1b}'), "json must not be colored");
+    let v: serde_json::Value = serde_json::from_str(&s).expect("valid json");
+    let alias = &v["packages"][0]["aliases"][0];
+    assert_eq!(alias["name"], "ll");
+    assert_eq!(alias["value"], "ls -al");
+    assert_eq!(alias["ssh_safe"], true);
+}
+
+#[test]
+fn status_json_reports_counts() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["add", "alias", "ll", "ls -al"])
+        .assert()
+        .success();
+    let out = duh(&home).args(["status", "--json"]).output().unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("valid json");
+    assert_eq!(v["aliases"], 1);
+    assert_eq!(v["default"], "default");
+}
+
+#[test]
+fn plain_is_ascii_only() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["add", "alias", "ll", "ls -al"])
+        .assert()
+        .success();
+    let out = duh(&home).args(["ls", "--plain"]).output().unwrap();
+    let s = String::from_utf8(out.stdout).unwrap();
+    assert!(s.is_ascii(), "--plain output must be ASCII-only: {s:?}");
+    assert!(!s.contains('\u{1b}'));
 }
 
 /// Write a function file into the default package's functions dir.
@@ -375,9 +437,9 @@ fn ls_fn_shows_script_function_tree() {
         "#!/usr/bin/env bash\n# git status, short\ngs() { git status -s; }\n",
     );
     duh(&home).args(["ls", "fn"]).assert().success().stdout(
-        predicate::str::contains("functions:")
-            .and(predicate::str::contains("git.sh"))
-            .and(predicate::str::contains("gs — git status, short")),
+        predicate::str::contains("git.sh")
+            .and(predicate::str::contains("gs"))
+            .and(predicate::str::contains("git status, short")),
     );
 }
 
