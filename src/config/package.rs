@@ -206,18 +206,6 @@ fn truncate(s: &str, n: usize) -> String {
     }
 }
 
-/// Ensure the default package and its directory exist.
-pub fn ensure_default() -> Result<()> {
-    let db = paths::package_db(paths::DEFAULT_PACKAGE)?;
-    if !db.exists() {
-        let mut pkg = Package::default();
-        pkg.metadata.name_origin = paths::DEFAULT_PACKAGE.to_string();
-        pkg.save(paths::DEFAULT_PACKAGE)?;
-        fs::create_dir_all(paths::package_functions_dir(paths::DEFAULT_PACKAGE)?)?;
-    }
-    Ok(())
-}
-
 /// List all package names present on disk, sorted.
 pub fn list_all() -> Result<Vec<String>> {
     let dir = paths::packages_dir()?;

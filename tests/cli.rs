@@ -232,6 +232,31 @@ fn uninstall_purge_deletes_everything() {
 }
 
 #[test]
+fn default_package_not_created_until_used() {
+    let home = TempDir::new().unwrap();
+    let default_dir = home.path().join("data/packages/default");
+
+    // Commands that only bootstrap must NOT materialize the default package.
+    duh(&home).args(["status"]).assert().success();
+    duh(&home).args(["where"]).assert().success();
+    duh(&home).args(["ls"]).assert().success();
+    assert!(
+        !default_dir.exists(),
+        "bootstrap must not create the default package dir"
+    );
+
+    // It appears only once something is actually written to it.
+    duh(&home)
+        .args(["add", "alias", "ll", "ls -al"])
+        .assert()
+        .success();
+    assert!(
+        default_dir.exists(),
+        "default package should be created lazily on first add"
+    );
+}
+
+#[test]
 fn add_echoes_target_package() {
     let home = TempDir::new().unwrap();
     duh(&home)
