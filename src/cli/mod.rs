@@ -9,6 +9,7 @@ mod rm;
 mod ssh;
 mod status;
 mod uninstall;
+mod upgrade;
 mod where_cmd;
 
 use anyhow::Result;
@@ -92,6 +93,12 @@ enum Command {
         #[arg(last = true)]
         ssh_args: Vec<String>,
     },
+    /// Update duh to the latest release (downloads + verifies + swaps the binary)
+    Upgrade {
+        /// Only report whether an update is available; don't install
+        #[arg(long)]
+        check: bool,
+    },
     /// Remove duh: deletes the binary, cache, and (with confirmation) packages
     Uninstall {
         /// Skip confirmation prompts (keeps packages unless --purge)
@@ -108,7 +115,7 @@ impl Cli {
         // The per-prompt hook must stay stat-only: never bootstrap there.
         let skip_bootstrap = matches!(
             self.command,
-            Command::Status { hook: true } | Command::Uninstall { .. }
+            Command::Status { hook: true } | Command::Uninstall { .. } | Command::Upgrade { .. }
         );
         if !skip_bootstrap {
             config::bootstrap()?;
@@ -128,6 +135,7 @@ impl Cli {
                 cleanup,
                 ssh_args,
             } => ssh::run(&host, cleanup, &ssh_args),
+            Command::Upgrade { check } => upgrade::run(check),
             Command::Uninstall { yes, purge } => uninstall::run(yes, purge),
         }
     }
