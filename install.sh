@@ -36,9 +36,12 @@ target="${arch_target}-${os_target}"
 # --- resolve version -------------------------------------------------------
 if [ "${DUH_VERSION:-}" = "" ]; then
   info "Resolving latest release..."
+  # GitHub returns single-line minified JSON, so extract just the tag_name token
+  # (grep -o) rather than splitting the whole line on quotes.
   DUH_VERSION="$(
     curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-      | grep '"tag_name"' | head -n1 | cut -d'"' -f4
+      | grep -o '"tag_name"[ ]*:[ ]*"[^"]*"' | head -n1 \
+      | sed -E 's/.*"tag_name"[ ]*:[ ]*"([^"]+)".*/\1/'
   )"
   [ -n "$DUH_VERSION" ] || err "could not determine latest version"
 fi
@@ -54,18 +57,18 @@ info "Downloading ${asset}..."
 curl -fsSL "${base}/${asset}" -o "${tmp}/${asset}" \
   || err "download failed: ${base}/${asset}"
 
-if curl -fsSL "${base}/${asset}.sha256" -o "${tmp}/${asset}.sha256" 2>/dev/null; then
-  info "Verifying checksum..."
-  expected="$(cut -d' ' -f1 < "${tmp}/${asset}.sha256")"
-  if command -v sha256sum >/dev/null 2>&1; then
-    actual="$(sha256sum "${tmp}/${asset}" | cut -d' ' -f1)"
-  else
-    actual="$(shasum -a 256 "${tmp}/${asset}" | cut -d' ' -f1)"
-  fi
-  [ "$expected" = "$actual" ] || err "checksum mismatch (expected $expected, got $actual)"
+# Checksum is published as `duh-<target>.sha256` (not `<asset>.sha256`).
+sha="duh-${target}.sha256"
+info "Verifying checksum..."
+curl -fsSL "${base}/${sha}" -o "${tmp}/${sha}" \
+  || err "checksum download failed: ${base}/${sha}"
+expected="$(cut -d' ' -f1 < "${tmp}/${sha}")"
+if command -v sha256sum >/dev/null 2>&1; then
+  actual="$(sha256sum "${tmp}/${asset}" | cut -d' ' -f1)"
 else
-  info "No checksum published; skipping verification."
+  actual="$(shasum -a 256 "${tmp}/${asset}" | cut -d' ' -f1)"
 fi
+[ "$expected" = "$actual" ] || err "checksum mismatch (expected $expected, got $actual)"
 
 # --- install ---------------------------------------------------------------
 tar -xzf "${tmp}/${asset}" -C "$tmp"

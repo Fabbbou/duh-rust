@@ -39,13 +39,14 @@ pub fn run(check_only: bool) -> Result<()> {
     curl_download(&format!("{base}/{asset}"), &tarball)
         .with_context(|| format!("downloading {asset}"))?;
 
-    // Verify checksum if published (matches install.sh behavior).
-    let sha_path = tmp.path().join(format!("{asset}.sha256"));
-    if curl_download(&format!("{base}/{asset}.sha256"), &sha_path).is_ok() {
-        verify_checksum(&tarball, &sha_path)?;
-    } else {
-        eprintln!("note: no checksum published; skipping verification");
-    }
+    // Verify checksum. The release names it `duh-<target>.sha256` (NOT
+    // `<asset>.sha256`). A missing checksum is a hard failure for a self-update —
+    // we won't swap an unverified binary into place.
+    let sha_name = format!("duh-{target}.sha256");
+    let sha_path = tmp.path().join(&sha_name);
+    curl_download(&format!("{base}/{sha_name}"), &sha_path)
+        .with_context(|| format!("downloading checksum {sha_name}"))?;
+    verify_checksum(&tarball, &sha_path)?;
 
     // Extract.
     let status = Command::new("tar")
