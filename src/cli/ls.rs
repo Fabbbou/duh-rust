@@ -83,6 +83,21 @@ pub fn run(
         let total_rows = n_alias + n_export + n_git + n_files;
         let mut row = 0usize;
 
+        // Subtle stat line of the non-empty groups.
+        let stats: Vec<String> = [
+            (n_alias, "alias", "aliases"),
+            (n_export, "export", "exports"),
+            (n_git, "git alias", "git aliases"),
+            (n_files, "script", "scripts"),
+        ]
+        .iter()
+        .filter(|(n, _, _)| *n > 0)
+        .map(|(n, one, many)| format!("{n} {}", if *n == 1 { one } else { many }))
+        .collect();
+        if !stats.is_empty() {
+            println!("  {}", ui::dim(&stats.join(" · ")));
+        }
+
         // Align the value column across alias/export/git names.
         let name_w = pkg
             .aliases
@@ -104,7 +119,7 @@ pub fn run(
                 println!(
                     "  {} {} {:<name_w$}  {} {}{}",
                     connector(row, total_rows),
-                    ui::dim("alias "),
+                    ui::lbl_alias(),
                     k,
                     ui::arrow(),
                     v,
@@ -123,7 +138,7 @@ pub fn run(
                 println!(
                     "  {} {} {:<name_w$}  {} {}{}",
                     connector(row, total_rows),
-                    ui::dim("export"),
+                    ui::lbl_export(),
                     k,
                     ui::arrow(),
                     v,
@@ -136,7 +151,7 @@ pub fn run(
             println!(
                 "  {} {} {:<name_w$}  {} {}",
                 connector(row, total_rows),
-                ui::dim("git   "),
+                ui::lbl_git(),
                 k,
                 ui::arrow(),
                 v
@@ -150,7 +165,7 @@ pub fn run(
                 println!(
                     "  {} {} {}",
                     connector(row, total_rows),
-                    ui::dim("script"),
+                    ui::lbl_script(),
                     ui::script_name(script)
                 );
 
@@ -168,7 +183,7 @@ pub fn run(
                             "  {}  {} {} {:<fn_w$}  {}",
                             cont,
                             fconn,
-                            ui::dim("fn"),
+                            ui::lbl_fn(),
                             ui::fn_name(&d.name),
                             ui::dim(s)
                         ),
@@ -176,13 +191,14 @@ pub fn run(
                             "  {}  {} {} {}",
                             cont,
                             fconn,
-                            ui::dim("fn"),
+                            ui::lbl_fn(),
                             ui::fn_name(&d.name)
                         ),
                     }
                 }
             }
         }
+        println!(); // blank line between packages
     }
     Ok(())
 }

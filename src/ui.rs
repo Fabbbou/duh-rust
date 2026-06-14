@@ -89,6 +89,24 @@ pub fn script_name(s: &str) -> String {
     style(s).blue().bold().to_string()
 }
 
+// --- row-type keyword labels (each a distinct color) -----------------------
+
+pub fn lbl_alias() -> String {
+    style("alias ").green().to_string()
+}
+pub fn lbl_export() -> String {
+    style("export").magenta().to_string()
+}
+pub fn lbl_git() -> String {
+    style("git   ").red().to_string()
+}
+pub fn lbl_script() -> String {
+    style("script").blue().to_string()
+}
+pub fn lbl_fn() -> String {
+    style("fn").yellow().to_string()
+}
+
 /// The `(default)` package marker: green.
 pub fn default_badge() -> String {
     style("(default)").green().to_string()
