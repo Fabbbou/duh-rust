@@ -3,8 +3,11 @@
 mod add;
 mod complete;
 mod doctor;
+mod edit;
+mod editor;
 mod init;
 mod ls;
+mod man;
 mod open;
 mod pkg;
 mod rm;
@@ -88,6 +91,14 @@ enum Command {
         #[arg(add = ArgValueCandidates::new(complete::packages))]
         package: Option<String>,
     },
+    /// Edit a package's db.toml in $EDITOR
+    Edit {
+        /// Package to edit (defaults to the default package)
+        #[arg(add = ArgValueCandidates::new(complete::packages))]
+        package: Option<String>,
+    },
+    /// Render the man page (roff) to stdout
+    Man,
     /// Emit the generated alias/export/function script (run on every shell start
     /// by the rc wiring; you rarely call this directly)
     Inject {
@@ -148,6 +159,7 @@ impl Cli {
             Command::Status { hook: true, .. }
                 | Command::Uninstall { .. }
                 | Command::Upgrade { .. }
+                | Command::Man
         );
         if !skip_bootstrap {
             config::bootstrap()?;
@@ -166,6 +178,8 @@ impl Cli {
             Command::Doctor => doctor::run(),
             Command::Where => where_cmd::run(),
             Command::Open { package } => open::run(package),
+            Command::Edit { package } => edit::run(package),
+            Command::Man => man::run(),
             Command::Inject { quiet } => status::inject(quiet),
             Command::Status { hook, json } => status::status(hook, json),
             Command::Init { shell } => init::run(shell),

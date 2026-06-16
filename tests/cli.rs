@@ -457,6 +457,68 @@ fn completion_lists_packages_and_filters() {
 }
 
 #[test]
+fn pkg_rename_export_import_roundtrip() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["pkg", "create", "work"])
+        .assert()
+        .success();
+    duh(&home).args(["use", "work"]).assert().success();
+    duh(&home)
+        .args(["add", "alias", "k", "kubectl"])
+        .assert()
+        .success();
+
+    duh(&home)
+        .args(["pkg", "rename", "work", "prod"])
+        .assert()
+        .success();
+    assert!(home.path().join("data/packages/prod").exists());
+    assert!(!home.path().join("data/packages/work").exists());
+
+    let archive = home.path().join("prod.tgz");
+    duh(&home)
+        .args(["pkg", "export", "prod", "--out"])
+        .arg(&archive)
+        .assert()
+        .success();
+    assert!(archive.exists());
+
+    duh(&home)
+        .args(["pkg", "import"])
+        .arg(&archive)
+        .arg("prod2")
+        .assert()
+        .success();
+    assert!(home.path().join("data/packages/prod2/db.toml").exists());
+}
+
+#[test]
+fn man_renders_roff() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["man"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(".TH").or(predicate::str::contains("duh")));
+}
+
+#[test]
+fn edit_uses_editor() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["add", "alias", "ll", "ls"])
+        .assert()
+        .success();
+    duh(&home)
+        .env("EDITOR", "true") // no-op editor
+        .args(["edit"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("edited package"));
+}
+
+#[test]
 fn schema_written_and_old_config_loads() {
     let home = TempDir::new().unwrap();
     duh(&home)
@@ -478,7 +540,10 @@ fn schema_written_and_old_config_loads() {
 fn doctor_flags_missing_enabled_and_conflict() {
     let home = TempDir::new().unwrap();
     // Materialize the default package (enabled by default) so doctor is healthy.
-    duh(&home).args(["add", "alias", "seed", "x"]).assert().success();
+    duh(&home)
+        .args(["add", "alias", "seed", "x"])
+        .assert()
+        .success();
     // Two packages defining the same alias → conflict (warn).
     duh(&home).args(["pkg", "create", "a"]).assert().success();
     duh(&home).args(["pkg", "create", "b"]).assert().success();

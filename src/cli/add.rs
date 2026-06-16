@@ -4,10 +4,9 @@ use crate::config::package::Package;
 use crate::config::paths;
 use crate::config::prefs::Prefs;
 use crate::inject::escape;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Subcommand;
 use std::fs;
-use std::process::Command;
 
 #[derive(Subcommand)]
 pub enum AddCmd {
@@ -98,7 +97,7 @@ pub fn run(cmd: AddCmd) -> Result<()> {
                     format!("# function: {name}\n{name}() {{\n  : # TODO\n}}\n"),
                 )?;
             }
-            open_editor(&file)?;
+            super::editor::open_in_editor(&file)?;
             // Warn-only lint after editing.
             for w in crate::config::package::function_lint(&file) {
                 eprintln!("{}", crate::ui::warn(&w));
@@ -123,20 +122,6 @@ pub fn run(cmd: AddCmd) -> Result<()> {
                 ))
             );
         }
-    }
-    Ok(())
-}
-
-fn open_editor(path: &std::path::Path) -> Result<()> {
-    let editor = std::env::var("EDITOR")
-        .or_else(|_| std::env::var("VISUAL"))
-        .unwrap_or_else(|_| "vi".to_string());
-    let status = Command::new(&editor)
-        .arg(path)
-        .status()
-        .with_context(|| format!("launching editor {editor}"))?;
-    if !status.success() {
-        anyhow::bail!("editor {editor} exited with failure");
     }
     Ok(())
 }
