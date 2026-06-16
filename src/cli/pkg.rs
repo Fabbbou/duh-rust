@@ -43,6 +43,26 @@ pub enum PkgCmd {
         #[arg(add = ArgValueCandidates::new(super::complete::packages))]
         name: String,
     },
+    /// Rename a local package
+    Rename {
+        #[arg(add = ArgValueCandidates::new(super::complete::packages))]
+        old: String,
+        new: String,
+    },
+    /// Export a package to a .tar.gz (share without git)
+    Export {
+        #[arg(add = ArgValueCandidates::new(super::complete::packages))]
+        name: String,
+        /// Output file (default: ./duh-<name>.tar.gz)
+        #[arg(long)]
+        out: Option<String>,
+    },
+    /// Import a package from a .tar.gz produced by `pkg export`
+    Import {
+        file: String,
+        /// Local name (default: the archived package name)
+        name: Option<String>,
+    },
 }
 
 pub fn run(cmd: PkgCmd) -> Result<()> {
@@ -55,7 +75,129 @@ pub fn run(cmd: PkgCmd) -> Result<()> {
         PkgCmd::Push { name } => push(&name),
         PkgCmd::Enable { name } => set_enabled(&name, true),
         PkgCmd::Disable { name } => set_enabled(&name, false),
+        PkgCmd::Rename { old, new } => rename(&old, &new),
+        PkgCmd::Export { name, out } => export(&name, out),
+        PkgCmd::Import { file, name } => import(&file, name),
     }
+}
+
+fn rename(old: &str, new: &str) -> Result<()> {
+    let from = paths::package_dir(old)?;
+    let to = paths::package_dir(new)?;
+    if !from.exists() {
+        bail!("no package {old:?}");
+    }
+    if to.exists() {
+        bail!("package {new} already exists");
+    }
+    fs::rename(&from, &to).with_context(|| format!("renaming {old} → {new}"))?;
+    let mut prefs = Prefs::load()?;
+    for p in prefs.packages.enabled.iter_mut() {
+        if p == old {
+            *p = new.to_string();
+        }
+    }
+    if prefs.packages.default == old {
+        prefs.packages.default = new.to_string();
+    }
+    prefs.save()?;
+    println!(
+        "{}",
+        crate::ui::ok(&format!("renamed {old} → {}", crate::ui::header(new)))
+    );
+    Ok(())
+}
+
+fn export(name: &str, out: Option<String>) -> Result<()> {
+    let dir = paths::package_dir(name)?;
+    if !dir.exists() {
+        bail!("no package {name:?}");
+    }
+    let out = out.unwrap_or_else(|| format!("duh-{name}.tar.gz"));
+    // tar -C <packages_dir> -czf <out> <name>  (archive holds the package dir).
+    let parent = paths::packages_dir()?;
+    let status = std::process::Command::new("tar")
+        .arg("-C")
+        .arg(&parent)
+        .arg("-czf")
+        .arg(&out)
+        .arg(name)
+        .status()
+        .context("running tar (is it installed?)")?;
+    if !status.success() {
+        bail!("tar export failed");
+    }
+    println!("{}", crate::ui::ok(&format!("exported {name} → {out}")));
+    Ok(())
+}
+
+fn import(file: &str, name: Option<String>) -> Result<()> {
+    if !std::path::Path::new(file).exists() {
+        bail!("no such file: {file}");
+    }
+    // Discover the top-level dir name in the archive (the package name).
+    let listing = std::process::Command::new("tar")
+        .arg("-tzf")
+        .arg(file)
+        .output()
+        .context("running tar")?;
+    if !listing.status.success() {
+        bail!("could not read archive {file}");
+    }
+    let archived = String::from_utf8_lossy(&listing.stdout)
+        .lines()
+        .next()
+        .map(|l| {
+            l.trim_end_matches('/')
+                .split('/')
+                .next()
+                .unwrap_or("")
+                .to_string()
+        })
+        .unwrap_or_default();
+    if archived.is_empty() {
+        bail!("archive {file} has no package directory");
+    }
+    paths::validate_package_name(&archived)?;
+    let target = name.unwrap_or_else(|| archived.clone());
+    paths::validate_package_name(&target)?;
+    if paths::package_dir(&target)?.exists() {
+        bail!("package {target} already exists");
+    }
+
+    let parent = paths::packages_dir()?;
+    fs::create_dir_all(&parent)?;
+    let status = std::process::Command::new("tar")
+        .arg("-C")
+        .arg(&parent)
+        .arg("-xzf")
+        .arg(file)
+        .status()
+        .context("running tar")?;
+    if !status.success() {
+        bail!("tar import failed");
+    }
+    // Archive extracts to its own name; rename to the requested target if different.
+    if target != archived {
+        if paths::package_dir(&archived)?.exists() {
+            fs::rename(paths::package_dir(&archived)?, paths::package_dir(&target)?)?;
+        } else {
+            bail!("archive did not contain a package named {archived:?}");
+        }
+    } else if !paths::package_dir(&target)?.exists() {
+        bail!("archive did not contain a package named {target:?}");
+    }
+    let mut prefs = Prefs::load()?;
+    prefs.enable(&target);
+    prefs.save()?;
+    println!(
+        "{}",
+        crate::ui::ok(&format!(
+            "imported and enabled {}",
+            crate::ui::header(&target)
+        ))
+    );
+    Ok(())
 }
 
 fn create(name: &str) -> Result<()> {

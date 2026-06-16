@@ -73,13 +73,19 @@ duh ls git                        # git aliases per package (from each gitconfig
 duh add git alias co checkout     # add a git alias to the package gitconfig
 duh rm  git alias co              # remove it
 
+duh use                           # show the default (write-target) package
+duh use work                      # switch the default package
+duh edit                          # edit the default package's db.toml in $EDITOR
+
 duh where                         # print every path duh uses
 duh open                          # open the default package folder in your editor
 duh open work                     # open a specific package folder
+duh doctor                        # diagnose your setup (wiring, conflicts, …)
 
 duh status                        # show sync state + which package add/rm target
 duh init                          # one-time rc wiring (run once)
 duh inject                        # the script that wiring runs each shell start
+duh man                           # render the man page (e.g. `duh man > duh.1`)
 ```
 
 Every `add`/`rm` prints which package it wrote to, so you always know the target.
@@ -101,11 +107,14 @@ to the packages and config folders.
 Share config via git repositories:
 
 ```sh
+duh pkg create work                            # new empty local package
 duh pkg add https://github.com/you/dotfiles   # clone + enable
 duh pkg ls                                     # list packages
 duh pkg sync                                   # pull updates for all enabled
 duh pkg push dotfiles                          # commit + push your changes
 duh pkg enable dotfiles / duh pkg disable …
+duh pkg rename old new                         # rename a local package
+duh pkg export work / duh pkg import work.tar.gz  # share without git
 ```
 
 Later-enabled packages override earlier ones, so a personal package can shadow a
@@ -166,6 +175,20 @@ can contain secret exports. See `src/inject/escape.rs` and `src/config/paths.rs`
 > equivalent to running its code.** `duh` warns when a package ships function
 > files; review them before trusting a package. SSH injection ships aliases and
 > exports only — functions are sent only when a host opts in via `ssh.toml`.
+
+## Platforms
+
+Linux and macOS (including WSL). On Linux duh follows XDG
+(`~/.local/share/duh`, `~/.config/duh`, `~/.cache/duh`, honoring `XDG_*`); on
+macOS it uses the Apple dirs (`~/Library/Application Support/net.fabou.duh`,
+`~/Library/Caches/net.fabou.duh`). Windows support is planned and is the gate
+for 1.0.
+
+## On-disk format
+
+`prefs.toml` and each package `db.toml` carry a `schema` version. As of 0.9 the
+format is stable and forward-migratable; files written by a newer duh are
+detected and warned about. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Build from source
 
