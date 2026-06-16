@@ -107,6 +107,11 @@ pub fn lbl_fn() -> String {
     style("fn").yellow().to_string()
 }
 
+/// Aligned field label for describe/card views (cyan).
+pub fn field(label: &str) -> String {
+    style(label).cyan().to_string()
+}
+
 /// The `(default)` package marker: green.
 pub fn default_badge() -> String {
     style("(default)").green().to_string()
