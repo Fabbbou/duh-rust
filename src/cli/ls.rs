@@ -236,23 +236,32 @@ fn show_function(packages: &[String], name: &str) -> Result<()> {
     for pkg in packages {
         for file in Package::function_files(pkg)? {
             for d in funcs::parse_functions(&file) {
-                if d.name == name {
-                    found = true;
-                    println!(
-                        "{} {}  {}",
-                        ui::fn_name(&d.name),
-                        ui::dim(&format!("[{pkg}]")),
-                        ui::dim(&file.display().to_string())
-                    );
-                    if d.doc.is_empty() {
-                        println!("  {}", ui::dim("(no documentation)"));
-                    } else {
-                        for line in &d.doc {
-                            println!("  {line}");
-                        }
-                    }
-                    println!();
+                if d.name != name {
+                    continue;
                 }
+                found = true;
+                let script = file.file_name().and_then(|s| s.to_str()).unwrap_or("?");
+
+                // Card header: the function name.
+                println!("{}", ui::fn_name(&d.name));
+                // Aligned labelled fields.
+                println!("  {}  {}", ui::field("package"), pkg);
+                println!("  {}   {}", ui::field("script"), ui::script_name(script));
+                println!(
+                    "  {}     {}",
+                    ui::field("path"),
+                    ui::dim(&file.display().to_string())
+                );
+                // Full doc block.
+                println!("  {}", ui::field("doc"));
+                if d.doc.is_empty() {
+                    println!("    {}", ui::dim("(no documentation)"));
+                } else {
+                    for line in &d.doc {
+                        println!("    {line}");
+                    }
+                }
+                println!();
             }
         }
     }

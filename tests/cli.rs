@@ -556,11 +556,18 @@ fn ls_fn_flag_shows_full_doc() {
         "greet.sh",
         "# say hello\n# politely\ngreet() { echo hi; }\n",
     );
+    // Describe view: script name, path, package, and the full doc block.
     duh(&home)
         .args(["ls", "--fn", "greet"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("say hello").and(predicate::str::contains("politely")));
+        .stdout(
+            predicate::str::contains("greet.sh")
+                .and(predicate::str::contains("functions/greet.sh"))
+                .and(predicate::str::contains("package"))
+                .and(predicate::str::contains("say hello"))
+                .and(predicate::str::contains("politely")),
+        );
     duh(&home)
         .args(["ls", "--fn", "nope"])
         .assert()
