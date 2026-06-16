@@ -11,6 +11,7 @@ mod ssh;
 mod status;
 mod uninstall;
 mod upgrade;
+mod use_pkg;
 mod where_cmd;
 
 use anyhow::Result;
@@ -69,6 +70,12 @@ enum Command {
     Pkg {
         #[command(subcommand)]
         cmd: pkg::PkgCmd,
+    },
+    /// Show or set the default package that `add`/`rm` write to
+    Use {
+        /// Package to make default (omit to print the current default)
+        #[arg(add = ArgValueCandidates::new(complete::packages))]
+        pkg: Option<String>,
     },
     /// Print where duh stores everything (data, config, cache, packages…)
     Where,
@@ -152,6 +159,7 @@ impl Cli {
                 json,
             } => ls::run(kind, package, func, json),
             Command::Pkg { cmd } => pkg::run(cmd),
+            Command::Use { pkg } => use_pkg::run(pkg),
             Command::Where => where_cmd::run(),
             Command::Open { package } => open::run(package),
             Command::Inject { quiet } => status::inject(quiet),

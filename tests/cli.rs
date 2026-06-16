@@ -457,6 +457,55 @@ fn completion_lists_packages_and_filters() {
 }
 
 #[test]
+fn use_and_pkg_create() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["add", "alias", "ll", "ls -al"])
+        .assert()
+        .success();
+    // bare use → current default
+    duh(&home)
+        .args(["use"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("default"));
+    // create a new local package
+    duh(&home)
+        .args(["pkg", "create", "work"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("created"));
+    assert!(home.path().join("data/packages/work/db.toml").exists());
+    // switch default to it
+    duh(&home)
+        .args(["use", "work"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("now"));
+    duh(&home)
+        .args(["use"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("work"));
+    // add now targets the new default
+    duh(&home)
+        .args(["add", "alias", "k", "kubectl"])
+        .assert()
+        .success();
+    assert!(
+        std::fs::read_to_string(home.path().join("data/packages/work/db.toml"))
+            .unwrap()
+            .contains("kubectl")
+    );
+    // unknown package errors
+    duh(&home)
+        .args(["use", "nope"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no package"));
+}
+
+#[test]
 fn machine_output_has_no_ansi() {
     // The eval'd paths must never carry color codes, even if forced on.
     let home = TempDir::new().unwrap();

@@ -11,6 +11,8 @@ use std::fs;
 
 #[derive(Subcommand)]
 pub enum PkgCmd {
+    /// Create a new empty local package
+    Create { name: String },
     /// Clone a remote package
     Add {
         url: String,
@@ -45,6 +47,7 @@ pub enum PkgCmd {
 
 pub fn run(cmd: PkgCmd) -> Result<()> {
     match cmd {
+        PkgCmd::Create { name } => create(&name),
         PkgCmd::Add { url, name } => add(&url, name),
         PkgCmd::Rm { name } => remove(&name),
         PkgCmd::Ls => list(),
@@ -53,6 +56,29 @@ pub fn run(cmd: PkgCmd) -> Result<()> {
         PkgCmd::Enable { name } => set_enabled(&name, true),
         PkgCmd::Disable { name } => set_enabled(&name, false),
     }
+}
+
+fn create(name: &str) -> Result<()> {
+    paths::validate_package_name(name)?;
+    if paths::package_dir(name)?.exists() {
+        bail!("package {name} already exists");
+    }
+    let mut pkg = Package::default();
+    pkg.metadata.name_origin = name.to_string();
+    pkg.save(name)?;
+    fs::create_dir_all(paths::package_functions_dir(name)?)?;
+
+    let mut prefs = Prefs::load()?;
+    prefs.enable(name);
+    prefs.save()?;
+    println!(
+        "{}",
+        crate::ui::ok(&format!(
+            "created and enabled package {}",
+            crate::ui::header(name)
+        ))
+    );
+    Ok(())
 }
 
 fn derive_name(url: &str) -> String {
