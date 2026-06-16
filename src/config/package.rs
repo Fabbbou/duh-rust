@@ -7,8 +7,10 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Package {
+    #[serde(default = "crate::config::default_schema")]
+    pub schema: u32,
     #[serde(default)]
     pub aliases: BTreeMap<String, String>,
     #[serde(default)]
@@ -18,6 +20,18 @@ pub struct Package {
     pub ssh: SshSafe,
     #[serde(default)]
     pub metadata: Metadata,
+}
+
+impl Default for Package {
+    fn default() -> Self {
+        Package {
+            schema: crate::config::SCHEMA_VERSION,
+            aliases: BTreeMap::new(),
+            exports: BTreeMap::new(),
+            ssh: SshSafe::default(),
+            metadata: Metadata::default(),
+        }
+    }
 }
 
 /// Opt-in allowlist of alias/export names that may be shipped to remote hosts.
@@ -77,6 +91,7 @@ impl Package {
             fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
         let pkg: Package =
             toml::from_str(&raw).with_context(|| format!("parsing {}", path.display()))?;
+        crate::config::warn_if_newer(pkg.schema, &format!("package {name}"));
         Ok(pkg)
     }
 

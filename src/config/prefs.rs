@@ -5,12 +5,24 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Prefs {
+    #[serde(default = "crate::config::default_schema")]
+    pub schema: u32,
     #[serde(default)]
     pub packages: PackagePrefs,
     #[serde(default)]
     pub tools: ToolsPrefs,
+}
+
+impl Default for Prefs {
+    fn default() -> Self {
+        Prefs {
+            schema: crate::config::SCHEMA_VERSION,
+            packages: PackagePrefs::default(),
+            tools: ToolsPrefs::default(),
+        }
+    }
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -57,6 +69,7 @@ impl Prefs {
             fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
         let prefs: Prefs =
             toml::from_str(&raw).with_context(|| format!("parsing {}", path.display()))?;
+        crate::config::warn_if_newer(prefs.schema, "prefs.toml");
         Ok(prefs)
     }
 

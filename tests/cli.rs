@@ -457,6 +457,64 @@ fn completion_lists_packages_and_filters() {
 }
 
 #[test]
+fn schema_written_and_old_config_loads() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["add", "alias", "ll", "ls -al"])
+        .assert()
+        .success();
+    let db = home.path().join("data/packages/default/db.toml");
+    assert!(std::fs::read_to_string(&db).unwrap().contains("schema = 1"));
+    // A db.toml without a schema field still loads (treated as v1).
+    std::fs::write(&db, "[aliases]\nzz = \"echo z\"\n").unwrap();
+    duh(&home)
+        .args(["inject", "--quiet"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("alias zz="));
+}
+
+#[test]
+fn doctor_flags_missing_enabled_and_conflict() {
+    let home = TempDir::new().unwrap();
+    // Materialize the default package (enabled by default) so doctor is healthy.
+    duh(&home).args(["add", "alias", "seed", "x"]).assert().success();
+    // Two packages defining the same alias → conflict (warn).
+    duh(&home).args(["pkg", "create", "a"]).assert().success();
+    duh(&home).args(["pkg", "create", "b"]).assert().success();
+    duh(&home).args(["use", "a"]).assert().success();
+    duh(&home)
+        .args(["add", "alias", "g", "git a"])
+        .assert()
+        .success();
+    duh(&home).args(["use", "b"]).assert().success();
+    duh(&home)
+        .args(["add", "alias", "g", "git b"])
+        .assert()
+        .success();
+    // ls shows the shadow marker.
+    duh(&home)
+        .args(["ls"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("shadowed by"));
+    // Healthy doctor (conflict is a warning) exits 0 and reports the conflict.
+    duh(&home)
+        .args(["doctor"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("wins"));
+    // A missing enabled package is a hard error → exit 1.
+    let prefs = home.path().join("config/prefs.toml");
+    std::fs::write(
+        &prefs,
+        "[packages]\nenabled = [\"ghost\"]\ndefault = \"ghost\"\n",
+    )
+    .unwrap();
+    duh(&home).args(["doctor"]).assert().failure();
+}
+
+#[test]
 fn use_and_pkg_create() {
     let home = TempDir::new().unwrap();
     duh(&home)

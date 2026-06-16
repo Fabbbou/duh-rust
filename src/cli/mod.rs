@@ -2,6 +2,7 @@
 
 mod add;
 mod complete;
+mod doctor;
 mod init;
 mod ls;
 mod open;
@@ -77,6 +78,8 @@ enum Command {
         #[arg(add = ArgValueCandidates::new(complete::packages))]
         pkg: Option<String>,
     },
+    /// Diagnose your duh setup (shell wiring, packages, conflicts, git includes)
+    Doctor,
     /// Print where duh stores everything (data, config, cache, packages…)
     Where,
     /// Open a package folder with your configured tool (vscode, nvim, …)
@@ -160,6 +163,7 @@ impl Cli {
             } => ls::run(kind, package, func, json),
             Command::Pkg { cmd } => pkg::run(cmd),
             Command::Use { pkg } => use_pkg::run(pkg),
+            Command::Doctor => doctor::run(),
             Command::Where => where_cmd::run(),
             Command::Open { package } => open::run(package),
             Command::Inject { quiet } => status::inject(quiet),
