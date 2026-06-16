@@ -149,6 +149,12 @@ pub fn state(s: &str, good: bool) -> String {
     }
 }
 
+/// A warning mark (⚠ / ! plain), yellow.
+pub fn mark_warn() -> String {
+    let g = if plain() { "!" } else { "⚠" };
+    style(g).yellow().to_string()
+}
+
 /// A present/missing mark for `duh where`.
 pub fn mark(present: bool) -> String {
     if present {

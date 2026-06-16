@@ -1,5 +1,6 @@
 //! `duh ls [alias|export|fn] [--package <name>] [--fn <name>] [--json]`
 
+use crate::config::conflicts;
 use crate::config::funcs;
 use crate::config::gitcfg;
 use crate::config::package::{self, Package};
@@ -49,6 +50,16 @@ pub fn run(
             show_git,
         );
     }
+
+    // Cross-package shadowing (last-enabled wins) → mark losing entries.
+    let winners = conflicts::winners(&prefs.enabled_existing()?)?;
+    let shadow =
+        |map: &std::collections::BTreeMap<String, String>, key: &str, pkg: &str| -> String {
+            match map.get(key) {
+                Some(w) if w != pkg => format!("  {}", ui::dim(&format!("(shadowed by {w})"))),
+                _ => String::new(),
+            }
+        };
 
     for name in &packages {
         let pkg = Package::load(name)?;
@@ -117,13 +128,14 @@ pub fn run(
                     String::new()
                 };
                 println!(
-                    "  {} {} {:<name_w$}  {} {}{}",
+                    "  {} {} {:<name_w$}  {} {}{}{}",
                     connector(row, total_rows),
                     ui::lbl_alias(),
                     k,
                     ui::arrow(),
                     v,
-                    tag
+                    tag,
+                    shadow(&winners.aliases, k, name)
                 );
             }
         }
@@ -136,13 +148,14 @@ pub fn run(
                     String::new()
                 };
                 println!(
-                    "  {} {} {:<name_w$}  {} {}{}",
+                    "  {} {} {:<name_w$}  {} {}{}{}",
                     connector(row, total_rows),
                     ui::lbl_export(),
                     k,
                     ui::arrow(),
                     v,
-                    tag
+                    tag,
+                    shadow(&winners.exports, k, name)
                 );
             }
         }

@@ -2,8 +2,12 @@
 
 mod add;
 mod complete;
+mod doctor;
+mod edit;
+mod editor;
 mod init;
 mod ls;
+mod man;
 mod open;
 mod pkg;
 mod rm;
@@ -11,6 +15,7 @@ mod ssh;
 mod status;
 mod uninstall;
 mod upgrade;
+mod use_pkg;
 mod where_cmd;
 
 use anyhow::Result;
@@ -70,6 +75,14 @@ enum Command {
         #[command(subcommand)]
         cmd: pkg::PkgCmd,
     },
+    /// Show or set the default package that `add`/`rm` write to
+    Use {
+        /// Package to make default (omit to print the current default)
+        #[arg(add = ArgValueCandidates::new(complete::packages))]
+        pkg: Option<String>,
+    },
+    /// Diagnose your duh setup (shell wiring, packages, conflicts, git includes)
+    Doctor,
     /// Print where duh stores everything (data, config, cache, packages…)
     Where,
     /// Open a package folder with your configured tool (vscode, nvim, …)
@@ -78,6 +91,14 @@ enum Command {
         #[arg(add = ArgValueCandidates::new(complete::packages))]
         package: Option<String>,
     },
+    /// Edit a package's db.toml in $EDITOR
+    Edit {
+        /// Package to edit (defaults to the default package)
+        #[arg(add = ArgValueCandidates::new(complete::packages))]
+        package: Option<String>,
+    },
+    /// Render the man page (roff) to stdout
+    Man,
     /// Emit the generated alias/export/function script (run on every shell start
     /// by the rc wiring; you rarely call this directly)
     Inject {
@@ -138,6 +159,7 @@ impl Cli {
             Command::Status { hook: true, .. }
                 | Command::Uninstall { .. }
                 | Command::Upgrade { .. }
+                | Command::Man
         );
         if !skip_bootstrap {
             config::bootstrap()?;
@@ -152,8 +174,12 @@ impl Cli {
                 json,
             } => ls::run(kind, package, func, json),
             Command::Pkg { cmd } => pkg::run(cmd),
+            Command::Use { pkg } => use_pkg::run(pkg),
+            Command::Doctor => doctor::run(),
             Command::Where => where_cmd::run(),
             Command::Open { package } => open::run(package),
+            Command::Edit { package } => edit::run(package),
+            Command::Man => man::run(),
             Command::Inject { quiet } => status::inject(quiet),
             Command::Status { hook, json } => status::status(hook, json),
             Command::Init { shell } => init::run(shell),

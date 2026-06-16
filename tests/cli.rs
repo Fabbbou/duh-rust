@@ -457,6 +457,178 @@ fn completion_lists_packages_and_filters() {
 }
 
 #[test]
+fn pkg_rename_export_import_roundtrip() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["pkg", "create", "work"])
+        .assert()
+        .success();
+    duh(&home).args(["use", "work"]).assert().success();
+    duh(&home)
+        .args(["add", "alias", "k", "kubectl"])
+        .assert()
+        .success();
+
+    duh(&home)
+        .args(["pkg", "rename", "work", "prod"])
+        .assert()
+        .success();
+    assert!(home.path().join("data/packages/prod").exists());
+    assert!(!home.path().join("data/packages/work").exists());
+
+    let archive = home.path().join("prod.tgz");
+    duh(&home)
+        .args(["pkg", "export", "prod", "--out"])
+        .arg(&archive)
+        .assert()
+        .success();
+    assert!(archive.exists());
+
+    duh(&home)
+        .args(["pkg", "import"])
+        .arg(&archive)
+        .arg("prod2")
+        .assert()
+        .success();
+    assert!(home.path().join("data/packages/prod2/db.toml").exists());
+}
+
+#[test]
+fn man_renders_roff() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["man"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(".TH").or(predicate::str::contains("duh")));
+}
+
+#[test]
+fn edit_uses_editor() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["add", "alias", "ll", "ls"])
+        .assert()
+        .success();
+    duh(&home)
+        .env("EDITOR", "true") // no-op editor
+        .args(["edit"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("edited package"));
+}
+
+#[test]
+fn schema_written_and_old_config_loads() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["add", "alias", "ll", "ls -al"])
+        .assert()
+        .success();
+    let db = home.path().join("data/packages/default/db.toml");
+    assert!(std::fs::read_to_string(&db).unwrap().contains("schema = 1"));
+    // A db.toml without a schema field still loads (treated as v1).
+    std::fs::write(&db, "[aliases]\nzz = \"echo z\"\n").unwrap();
+    duh(&home)
+        .args(["inject", "--quiet"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("alias zz="));
+}
+
+#[test]
+fn doctor_flags_missing_enabled_and_conflict() {
+    let home = TempDir::new().unwrap();
+    // Materialize the default package (enabled by default) so doctor is healthy.
+    duh(&home)
+        .args(["add", "alias", "seed", "x"])
+        .assert()
+        .success();
+    // Two packages defining the same alias → conflict (warn).
+    duh(&home).args(["pkg", "create", "a"]).assert().success();
+    duh(&home).args(["pkg", "create", "b"]).assert().success();
+    duh(&home).args(["use", "a"]).assert().success();
+    duh(&home)
+        .args(["add", "alias", "g", "git a"])
+        .assert()
+        .success();
+    duh(&home).args(["use", "b"]).assert().success();
+    duh(&home)
+        .args(["add", "alias", "g", "git b"])
+        .assert()
+        .success();
+    // ls shows the shadow marker.
+    duh(&home)
+        .args(["ls"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("shadowed by"));
+    // Healthy doctor (conflict is a warning) exits 0 and reports the conflict.
+    duh(&home)
+        .args(["doctor"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("wins"));
+    // A missing enabled package is a hard error → exit 1.
+    let prefs = home.path().join("config/prefs.toml");
+    std::fs::write(
+        &prefs,
+        "[packages]\nenabled = [\"ghost\"]\ndefault = \"ghost\"\n",
+    )
+    .unwrap();
+    duh(&home).args(["doctor"]).assert().failure();
+}
+
+#[test]
+fn use_and_pkg_create() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["add", "alias", "ll", "ls -al"])
+        .assert()
+        .success();
+    // bare use → current default
+    duh(&home)
+        .args(["use"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("default"));
+    // create a new local package
+    duh(&home)
+        .args(["pkg", "create", "work"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("created"));
+    assert!(home.path().join("data/packages/work/db.toml").exists());
+    // switch default to it
+    duh(&home)
+        .args(["use", "work"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("now"));
+    duh(&home)
+        .args(["use"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("work"));
+    // add now targets the new default
+    duh(&home)
+        .args(["add", "alias", "k", "kubectl"])
+        .assert()
+        .success();
+    assert!(
+        std::fs::read_to_string(home.path().join("data/packages/work/db.toml"))
+            .unwrap()
+            .contains("kubectl")
+    );
+    // unknown package errors
+    duh(&home)
+        .args(["use", "nope"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no package"));
+}
+
+#[test]
 fn machine_output_has_no_ansi() {
     // The eval'd paths must never carry color codes, even if forced on.
     let home = TempDir::new().unwrap();
