@@ -3,7 +3,40 @@
 All notable changes to duh are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com); duh uses semantic versioning.
 
-## [0.9.0] — unreleased
+## [0.10.0]
+
+**BREAKING — new kubectl-style grammar.** Every command is now
+`duh <verb> <resource> [name]`. The old verb-first/noun-first mix
+(`add`, `rm`, `ls`, `pkg <op>`) is removed. Resources: `alias`, `export`, `fn`,
+`pkg`, `gitalias` (with aliases like `aliases`, `package`, `func`, `git`).
+
+### Changed
+- CRUD verbs: `get` (list/show), `create`, `edit`, `delete`, `describe`.
+- Package lifecycle ops are now flat top-level verbs (the `pkg` namespace is gone).
+- `create`/`delete` take `-p/--package` to target a non-default package.
+
+### Migration
+
+| old (≤0.9) | new (0.10) |
+|---|---|
+| `duh add alias N V` / `add export N V` | `duh create alias N V` / `create export N V` |
+| `duh add fn N` | `duh create fn N` |
+| `duh add git alias N V` | `duh create gitalias N V` |
+| `duh rm alias/export/fn N` | `duh delete alias/export/fn N` |
+| `duh rm git alias N` | `duh delete gitalias N` |
+| `duh ls [kind]` | `duh get [resource]` |
+| `duh ls --fn N` | `duh describe fn N` |
+| `duh pkg ls` | `duh get pkg` |
+| `duh pkg create N` | `duh create pkg N` |
+| `duh pkg add URL [N]` | `duh create pkg N --remote URL` |
+| `duh pkg rm N` | `duh delete pkg N` |
+| `duh pkg enable/disable N` | `duh enable/disable N` |
+| `duh pkg rename O N` | `duh rename O N` |
+| `duh pkg sync` / `pkg push N` | `duh sync` / `duh push N` |
+| `duh pkg export N` / `pkg import F` | `duh export N` / `duh import F` |
+| `duh use` / `edit` / `open` | unchanged (`edit` now takes a resource: `edit pkg` / `edit fn N`) |
+
+## [0.9.0]
 
 Pre-1.0 milestone: fill the remaining CLI gaps and add stability/diagnostics.
 (1.0 is gated on Windows support.)

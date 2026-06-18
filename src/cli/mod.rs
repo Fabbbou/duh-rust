@@ -1,16 +1,22 @@
 //! CLI surface and dispatch.
+//!
+//! Grammar is kubectl-style: `duh VERB RESOURCE [NAME]`. The CRUD verbs
+//! (`get`/`create`/`edit`/`delete`/`describe`) take a positional [`Resource`];
+//! package lifecycle ops are flat top-level verbs (`enable`, `sync`, …).
 
-mod add;
 mod complete;
+mod create;
+mod delete;
+mod describe;
 mod doctor;
 mod edit;
 mod editor;
+mod get;
 mod init;
-mod ls;
 mod man;
 mod open;
-mod pkg;
-mod rm;
+mod pkgops;
+mod resource;
 mod ssh;
 mod status;
 mod uninstall;
@@ -21,6 +27,7 @@ mod where_cmd;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use clap_complete::engine::ArgValueCandidates;
+use resource::Resource;
 
 #[derive(Parser)]
 #[command(
@@ -29,6 +36,8 @@ use clap_complete::engine::ArgValueCandidates;
     about = "Inject your shell config (aliases, exports, functions) everywhere",
     long_about = "duh manages shell aliases, exports, and functions in TOML packages \
                   and injects them into your shell — fast, direnv-style.\n\n\
+                  Grammar is kubectl-style: `duh <verb> <resource> [name]`, e.g. \
+                  `duh create alias gs 'git status'` or `duh get alias`.\n\n\
                   Quick start: add `eval \"$(duh init)\"` to your shell rc.\n\
                   `init` wires duh into your rc once; `inject` is the script that \
                   wiring runs on each shell start (you rarely call it directly)."
@@ -46,57 +55,127 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Add an alias, export, or function
-    Add {
-        #[command(subcommand)]
-        what: add::AddCmd,
-    },
-    /// Remove an alias, export, or function
-    Rm {
-        #[command(subcommand)]
-        what: rm::RmCmd,
-    },
-    /// List aliases, exports, and functions
-    Ls {
-        /// Optional filter: alias | export | fn
-        kind: Option<ls::Kind>,
+    /// List resources (bare = everything; `get pkg` lists packages)
+    Get {
+        /// alias | export | fn | pkg | gitalias (omit to list all)
+        resource: Option<Resource>,
+        /// Show a single item by name (delegates to `describe`)
+        #[arg(add = ArgValueCandidates::new(complete::resource_name))]
+        name: Option<String>,
         /// Show only this package
         #[arg(short, long, add = ArgValueCandidates::new(complete::packages))]
         package: Option<String>,
-        /// Print the full documentation for a single function
-        #[arg(short = 'f', long = "fn", add = ArgValueCandidates::new(complete::functions))]
-        func: Option<String>,
         /// Output machine-readable JSON
         #[arg(long)]
         json: bool,
     },
-    /// Manage packages (remote bundles of config)
-    Pkg {
-        #[command(subcommand)]
-        cmd: pkg::PkgCmd,
+    /// Create an alias, export, function, package, or git alias
+    Create {
+        /// alias | export | fn | pkg | gitalias
+        resource: Resource,
+        /// Name of the new resource
+        name: String,
+        /// Value (required for alias/export/gitalias; omit for fn/pkg)
+        value: Option<String>,
+        /// Flag an alias/export as safe to inject over SSH
+        #[arg(long)]
+        ssh_safe: bool,
+        /// Target package (defaults to the default package)
+        #[arg(short, long, add = ArgValueCandidates::new(complete::packages))]
+        package: Option<String>,
+        /// For `create pkg`: clone from this git URL instead of an empty package
+        #[arg(long)]
+        remote: Option<String>,
     },
-    /// Show or set the default package that `add`/`rm` write to
+    /// Edit a function or a package's db.toml in $EDITOR
+    Edit {
+        /// fn | pkg
+        resource: Resource,
+        /// Name (function name; for pkg, the package — defaults to the default package)
+        #[arg(add = ArgValueCandidates::new(complete::resource_name))]
+        name: Option<String>,
+        /// Target package (for `edit fn`)
+        #[arg(short, long, add = ArgValueCandidates::new(complete::packages))]
+        package: Option<String>,
+    },
+    /// Delete an alias, export, function, package, or git alias
+    Delete {
+        /// alias | export | fn | pkg | gitalias
+        resource: Resource,
+        /// Name to delete
+        #[arg(add = ArgValueCandidates::new(complete::resource_name))]
+        name: String,
+        /// Target package (defaults to the default package)
+        #[arg(short, long, add = ArgValueCandidates::new(complete::packages))]
+        package: Option<String>,
+    },
+    /// Show full detail for one item (function doc, package contents, …)
+    Describe {
+        /// alias | export | fn | pkg | gitalias
+        resource: Resource,
+        /// Name to describe
+        #[arg(add = ArgValueCandidates::new(complete::resource_name))]
+        name: String,
+        /// Restrict the search to this package
+        #[arg(short, long, add = ArgValueCandidates::new(complete::packages))]
+        package: Option<String>,
+        /// Output machine-readable JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show or set the default package that `create`/`delete` write to
     Use {
         /// Package to make default (omit to print the current default)
         #[arg(add = ArgValueCandidates::new(complete::packages))]
         pkg: Option<String>,
     },
-    /// Diagnose your duh setup (shell wiring, packages, conflicts, git includes)
-    Doctor,
-    /// Print where duh stores everything (data, config, cache, packages…)
-    Where,
+    /// Enable a package for injection
+    Enable {
+        #[arg(add = ArgValueCandidates::new(complete::packages))]
+        pkg: String,
+    },
+    /// Disable a package
+    Disable {
+        #[arg(add = ArgValueCandidates::new(complete::packages))]
+        pkg: String,
+    },
+    /// Rename a local package
+    Rename {
+        #[arg(add = ArgValueCandidates::new(complete::packages))]
+        old: String,
+        new: String,
+    },
+    /// Pull updates for all enabled remote packages
+    Sync,
+    /// Commit and push local changes of a package
+    Push {
+        #[arg(add = ArgValueCandidates::new(complete::packages))]
+        pkg: String,
+    },
+    /// Export a package to a .tar.gz (share without git)
+    Export {
+        #[arg(add = ArgValueCandidates::new(complete::packages))]
+        pkg: String,
+        /// Output file (default: ./duh-<pkg>.tar.gz)
+        #[arg(long)]
+        out: Option<String>,
+    },
+    /// Import a package from a .tar.gz produced by `export`
+    Import {
+        file: String,
+        /// Local name (default: the archived package name)
+        name: Option<String>,
+    },
     /// Open a package folder with your configured tool (vscode, nvim, …)
     Open {
         /// Package to open (defaults to the default package)
         #[arg(add = ArgValueCandidates::new(complete::packages))]
         package: Option<String>,
     },
-    /// Edit a package's db.toml in $EDITOR
-    Edit {
-        /// Package to edit (defaults to the default package)
-        #[arg(add = ArgValueCandidates::new(complete::packages))]
-        package: Option<String>,
-    },
+    /// Diagnose your duh setup (shell wiring, packages, conflicts, git includes)
+    Doctor,
+    /// Print where duh stores everything (data, config, cache, packages…)
+    Where,
     /// Render the man page (roff) to stdout
     Man,
     /// Emit the generated alias/export/function script (run on every shell start
@@ -165,20 +244,47 @@ impl Cli {
             config::bootstrap()?;
         }
         match self.command {
-            Command::Add { what } => add::run(what),
-            Command::Rm { what } => rm::run(what),
-            Command::Ls {
-                kind,
+            Command::Get {
+                resource,
+                name,
                 package,
-                func,
                 json,
-            } => ls::run(kind, package, func, json),
-            Command::Pkg { cmd } => pkg::run(cmd),
+            } => get::run(resource, name, package, json),
+            Command::Create {
+                resource,
+                name,
+                value,
+                ssh_safe,
+                package,
+                remote,
+            } => create::run(resource, name, value, ssh_safe, package, remote),
+            Command::Edit {
+                resource,
+                name,
+                package,
+            } => edit::run(resource, name, package),
+            Command::Delete {
+                resource,
+                name,
+                package,
+            } => delete::run(resource, name, package),
+            Command::Describe {
+                resource,
+                name,
+                package,
+                json,
+            } => describe::run(resource, name, package, json),
             Command::Use { pkg } => use_pkg::run(pkg),
+            Command::Enable { pkg } => pkgops::set_enabled(&pkg, true),
+            Command::Disable { pkg } => pkgops::set_enabled(&pkg, false),
+            Command::Rename { old, new } => pkgops::rename(&old, &new),
+            Command::Sync => pkgops::sync(),
+            Command::Push { pkg } => pkgops::push(&pkg),
+            Command::Export { pkg, out } => pkgops::export(&pkg, out),
+            Command::Import { file, name } => pkgops::import(&file, name),
+            Command::Open { package } => open::run(package),
             Command::Doctor => doctor::run(),
             Command::Where => where_cmd::run(),
-            Command::Open { package } => open::run(package),
-            Command::Edit { package } => edit::run(package),
             Command::Man => man::run(),
             Command::Inject { quiet } => status::inject(quiet),
             Command::Status { hook, json } => status::status(hook, json),

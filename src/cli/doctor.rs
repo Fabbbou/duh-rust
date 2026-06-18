@@ -34,7 +34,7 @@ pub fn run() -> Result<()> {
         ));
     } else {
         bad(&format!(
-            "default package `{}` does not exist (run `duh use <pkg>`)",
+            "default package `{}` does not exist (run `duh create pkg <name>` then `duh use <pkg>`)",
             prefs.packages.default
         ));
     }

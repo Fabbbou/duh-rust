@@ -1,87 +1,15 @@
-//! `duh pkg add|rm|ls|sync|push|enable|disable`
+//! Package lifecycle operations, shared by the `create`/`delete`/`get` verbs and
+//! the flat lifecycle verbs (`enable`/`disable`/`rename`/`sync`/`push`/`export`/
+//! `import`). No clap types here — just plain functions over package state.
 
 use crate::config::package::{self, Package};
 use crate::config::paths;
 use crate::config::prefs::Prefs;
 use crate::git;
 use anyhow::{bail, Context, Result};
-use clap::Subcommand;
-use clap_complete::engine::ArgValueCandidates;
 use std::fs;
 
-#[derive(Subcommand)]
-pub enum PkgCmd {
-    /// Create a new empty local package
-    Create { name: String },
-    /// Clone a remote package
-    Add {
-        url: String,
-        /// Local name (defaults to the repo name)
-        name: Option<String>,
-    },
-    /// Delete a local package
-    Rm {
-        #[arg(add = ArgValueCandidates::new(super::complete::packages))]
-        name: String,
-    },
-    /// List packages and their enabled state
-    Ls,
-    /// Pull updates for all enabled remote packages
-    Sync,
-    /// Commit and push local changes of a package
-    Push {
-        #[arg(add = ArgValueCandidates::new(super::complete::packages))]
-        name: String,
-    },
-    /// Enable a package for injection
-    Enable {
-        #[arg(add = ArgValueCandidates::new(super::complete::packages))]
-        name: String,
-    },
-    /// Disable a package
-    Disable {
-        #[arg(add = ArgValueCandidates::new(super::complete::packages))]
-        name: String,
-    },
-    /// Rename a local package
-    Rename {
-        #[arg(add = ArgValueCandidates::new(super::complete::packages))]
-        old: String,
-        new: String,
-    },
-    /// Export a package to a .tar.gz (share without git)
-    Export {
-        #[arg(add = ArgValueCandidates::new(super::complete::packages))]
-        name: String,
-        /// Output file (default: ./duh-<name>.tar.gz)
-        #[arg(long)]
-        out: Option<String>,
-    },
-    /// Import a package from a .tar.gz produced by `pkg export`
-    Import {
-        file: String,
-        /// Local name (default: the archived package name)
-        name: Option<String>,
-    },
-}
-
-pub fn run(cmd: PkgCmd) -> Result<()> {
-    match cmd {
-        PkgCmd::Create { name } => create(&name),
-        PkgCmd::Add { url, name } => add(&url, name),
-        PkgCmd::Rm { name } => remove(&name),
-        PkgCmd::Ls => list(),
-        PkgCmd::Sync => sync(),
-        PkgCmd::Push { name } => push(&name),
-        PkgCmd::Enable { name } => set_enabled(&name, true),
-        PkgCmd::Disable { name } => set_enabled(&name, false),
-        PkgCmd::Rename { old, new } => rename(&old, &new),
-        PkgCmd::Export { name, out } => export(&name, out),
-        PkgCmd::Import { file, name } => import(&file, name),
-    }
-}
-
-fn rename(old: &str, new: &str) -> Result<()> {
+pub fn rename(old: &str, new: &str) -> Result<()> {
     let from = paths::package_dir(old)?;
     let to = paths::package_dir(new)?;
     if !from.exists() {
@@ -108,7 +36,7 @@ fn rename(old: &str, new: &str) -> Result<()> {
     Ok(())
 }
 
-fn export(name: &str, out: Option<String>) -> Result<()> {
+pub fn export(name: &str, out: Option<String>) -> Result<()> {
     let dir = paths::package_dir(name)?;
     if !dir.exists() {
         bail!("no package {name:?}");
@@ -131,7 +59,7 @@ fn export(name: &str, out: Option<String>) -> Result<()> {
     Ok(())
 }
 
-fn import(file: &str, name: Option<String>) -> Result<()> {
+pub fn import(file: &str, name: Option<String>) -> Result<()> {
     if !std::path::Path::new(file).exists() {
         bail!("no such file: {file}");
     }
@@ -200,7 +128,8 @@ fn import(file: &str, name: Option<String>) -> Result<()> {
     Ok(())
 }
 
-fn create(name: &str) -> Result<()> {
+/// Create a new empty local package and enable it.
+pub fn create_empty(name: &str) -> Result<()> {
     paths::validate_package_name(name)?;
     if paths::package_dir(name)?.exists() {
         bail!("package {name} already exists");
@@ -232,7 +161,8 @@ fn derive_name(url: &str) -> String {
         .to_string()
 }
 
-fn add(url: &str, name: Option<String>) -> Result<()> {
+/// Clone a remote package and enable it.
+pub fn clone_remote(url: &str, name: Option<String>) -> Result<()> {
     let name = name.unwrap_or_else(|| derive_name(url));
     paths::validate_package_name(&name)?;
     let dest = paths::package_dir(&name)?;
@@ -245,11 +175,17 @@ fn add(url: &str, name: Option<String>) -> Result<()> {
     let mut prefs = Prefs::load()?;
     prefs.enable(&name);
     prefs.save()?;
-    println!("added and enabled package {name}");
+    println!(
+        "{}",
+        crate::ui::ok(&format!(
+            "cloned and enabled package {}",
+            crate::ui::header(&name)
+        ))
+    );
     Ok(())
 }
 
-fn remove(name: &str) -> Result<()> {
+pub fn remove(name: &str) -> Result<()> {
     if name == paths::DEFAULT_PACKAGE {
         bail!("refusing to remove the default package");
     }
@@ -261,11 +197,11 @@ fn remove(name: &str) -> Result<()> {
     let mut prefs = Prefs::load()?;
     prefs.disable(name);
     prefs.save()?;
-    println!("removed package {name}");
+    println!("{}", crate::ui::ok(&format!("removed package {name}")));
     Ok(())
 }
 
-fn list() -> Result<()> {
+pub fn list() -> Result<()> {
     let prefs = Prefs::load()?;
     let all = package::list_all()?;
     if all.is_empty() {
@@ -295,7 +231,7 @@ fn list() -> Result<()> {
     Ok(())
 }
 
-fn sync() -> Result<()> {
+pub fn sync() -> Result<()> {
     let prefs = Prefs::load()?;
     for name in prefs.enabled_existing()? {
         let pkg = Package::load(&name)?;
@@ -313,7 +249,7 @@ fn sync() -> Result<()> {
     Ok(())
 }
 
-fn push(name: &str) -> Result<()> {
+pub fn push(name: &str) -> Result<()> {
     let dir = paths::package_dir(name)?;
     if !dir.join(".git").exists() {
         bail!("package {name} is not a git repo");
@@ -323,7 +259,7 @@ fn push(name: &str) -> Result<()> {
     Ok(())
 }
 
-fn set_enabled(name: &str, enabled: bool) -> Result<()> {
+pub fn set_enabled(name: &str, enabled: bool) -> Result<()> {
     if !paths::package_dir(name)?.exists() {
         bail!("no package {name:?}");
     }
@@ -344,7 +280,7 @@ fn set_enabled(name: &str, enabled: bool) -> Result<()> {
 /// Function bodies are injected into your shell VERBATIM (by design). For a
 /// package from an untrusted remote, that is arbitrary code execution — warn so
 /// the user knows enabling it runs that code on every prompt.
-fn warn_if_ships_functions(name: &str) -> Result<()> {
+pub fn warn_if_ships_functions(name: &str) -> Result<()> {
     let funcs = Package::function_files(name)?;
     if !funcs.is_empty() {
         eprintln!(

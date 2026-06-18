@@ -14,7 +14,7 @@ pub fn run(pkg: Option<String>) -> Result<()> {
         }
         Some(name) => {
             if !paths::package_dir(&name)?.exists() {
-                bail!("no package {name:?} (see `duh pkg ls`)");
+                bail!("no package {name:?} (see `duh get pkg`)");
             }
             prefs.packages.default = name.clone();
             prefs.save()?;
@@ -26,7 +26,7 @@ pub fn run(pkg: Option<String>) -> Result<()> {
                 eprintln!(
                     "{}",
                     ui::warn(&format!(
-                        "package {name} is not enabled — its entries won't inject until `duh pkg enable {name}`"
+                        "package {name} is not enabled — its entries won't inject until `duh enable {name}`"
                     ))
                 );
             }

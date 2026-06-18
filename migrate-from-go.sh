@@ -148,6 +148,6 @@ fi
 # --- summary ---------------------------------------------------------------
 echo
 info "Done: $copied migrated, $skipped skipped, $gitcfg gitconfig file(s) flagged."
-info "Verify with:  duh pkg ls  &&  duh ls"
+info "Verify with:  duh get pkg  &&  duh get"
 [ "$gitcfg" -gt 0 ] && warn "Re-add any git aliases to your ~/.gitconfig manually."
-echo "Then reload your shell (or run: duh reload)."
+echo "Then reload your shell (or run: duh-reload)."

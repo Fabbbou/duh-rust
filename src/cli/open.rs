@@ -10,7 +10,7 @@ pub fn run(package: Option<String>) -> Result<()> {
     let name = package.unwrap_or_else(|| prefs.packages.default.clone());
     let dir = paths::package_dir(&name)?; // validates name
     if !dir.exists() {
-        bail!("no package {name:?} (see `duh pkg ls`)");
+        bail!("no package {name:?} (see `duh get pkg`)");
     }
 
     // Tool resolution: configured [tools] open → $EDITOR → $VISUAL → error.

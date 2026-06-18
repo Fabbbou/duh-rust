@@ -1,5 +1,10 @@
-//! `duh ls [alias|export|fn] [--package <name>] [--fn <name>] [--json]`
+//! `duh get [resource] [name] [-p pkg] [--json]`
+//!
+//! Bare `get` lists everything in the enabled packages. A `resource` filters to
+//! one kind; `get pkg` lists packages. Supplying a `name` shows that single item
+//! (delegated to `describe`). Machine output (`--json`) is never colored.
 
+use super::resource::Resource;
 use crate::config::conflicts;
 use crate::config::funcs;
 use crate::config::gitcfg;
@@ -8,37 +13,35 @@ use crate::config::paths;
 use crate::config::prefs::Prefs;
 use crate::ui;
 use anyhow::{bail, Result};
-use clap::ValueEnum;
-
-#[derive(Clone, Copy, ValueEnum)]
-pub enum Kind {
-    Alias,
-    Export,
-    Fn,
-    Git,
-}
 
 pub fn run(
-    kind: Option<Kind>,
+    resource: Option<Resource>,
+    name: Option<String>,
     package: Option<String>,
-    func: Option<String>,
     json: bool,
 ) -> Result<()> {
-    let prefs = Prefs::load()?;
-    let packages = resolve_packages(&prefs, package)?;
+    // `get <resource> <name>` → show a single item (same as describe).
+    if let Some(name) = name {
+        let resource = resource.expect("clap guarantees a resource precedes a name");
+        return super::describe::run(resource, name, package, json);
+    }
 
-    if let Some(name) = func {
+    // `get pkg` → list packages.
+    if matches!(resource, Some(Resource::Pkg)) {
         return if json {
-            show_function_json(&packages, &name)
+            pkg_list_json()
         } else {
-            show_function(&packages, &name)
+            super::pkgops::list()
         };
     }
 
-    let show_alias = matches!(kind, None | Some(Kind::Alias));
-    let show_export = matches!(kind, None | Some(Kind::Export));
-    let show_fn = matches!(kind, None | Some(Kind::Fn));
-    let show_git = matches!(kind, None | Some(Kind::Git));
+    let prefs = Prefs::load()?;
+    let packages = resolve_packages(&prefs, package)?;
+
+    let show_alias = matches!(resource, None | Some(Resource::Alias));
+    let show_export = matches!(resource, None | Some(Resource::Export));
+    let show_fn = matches!(resource, None | Some(Resource::Fn));
+    let show_git = matches!(resource, None | Some(Resource::Gitalias));
 
     if json {
         return list_json(
@@ -50,7 +53,25 @@ pub fn run(
             show_git,
         );
     }
+    render_packages(
+        &prefs,
+        &packages,
+        show_alias,
+        show_export,
+        show_fn,
+        show_git,
+    )
+}
 
+/// Render the tree view for the given packages. Shared with `describe pkg`.
+pub fn render_packages(
+    prefs: &Prefs,
+    packages: &[String],
+    show_alias: bool,
+    show_export: bool,
+    show_fn: bool,
+    show_git: bool,
+) -> Result<()> {
     // Cross-package shadowing (last-enabled wins) → mark losing entries.
     let winners = conflicts::winners(&prefs.enabled_existing()?)?;
     let shadow =
@@ -61,7 +82,7 @@ pub fn run(
             }
         };
 
-    for name in &packages {
+    for name in packages {
         let pkg = Package::load(name)?;
         let files = Package::function_files(name)?;
         let git = if show_git {
@@ -217,7 +238,7 @@ pub fn run(
 }
 
 /// Tree connector: `└─` for the last row, `├─` otherwise.
-fn connector(idx: usize, total: usize) -> &'static str {
+pub fn connector(idx: usize, total: usize) -> &'static str {
     if idx >= total {
         ui::ell()
     } else {
@@ -225,7 +246,7 @@ fn connector(idx: usize, total: usize) -> &'static str {
     }
 }
 
-fn resolve_packages(prefs: &Prefs, package: Option<String>) -> Result<Vec<String>> {
+pub fn resolve_packages(prefs: &Prefs, package: Option<String>) -> Result<Vec<String>> {
     match package {
         Some(name) => {
             if !paths::package_dir(&name)?.exists() {
@@ -244,50 +265,26 @@ fn resolve_packages(prefs: &Prefs, package: Option<String>) -> Result<Vec<String
     }
 }
 
-fn show_function(packages: &[String], name: &str) -> Result<()> {
-    let mut found = false;
-    for pkg in packages {
-        for file in Package::function_files(pkg)? {
-            for d in funcs::parse_functions(&file) {
-                if d.name != name {
-                    continue;
-                }
-                found = true;
-                let script = file.file_name().and_then(|s| s.to_str()).unwrap_or("?");
+// --- JSON output (never colored) -------------------------------------------
 
-                // Card header: the function name.
-                println!("{}", ui::fn_name(&d.name));
-                // Aligned labelled fields.
-                println!("  {}  {}", ui::field("package"), pkg);
-                println!("  {}   {}", ui::field("script"), ui::script_name(script));
-                println!(
-                    "  {}     {}",
-                    ui::field("path"),
-                    ui::dim(&file.display().to_string())
-                );
-                // Full doc block.
-                println!("  {}", ui::field("doc"));
-                if d.doc.is_empty() {
-                    println!("    {}", ui::dim("(no documentation)"));
-                } else {
-                    for line in &d.doc {
-                        println!("    {line}");
-                    }
-                }
-                println!();
-            }
-        }
-    }
-    if !found {
-        bail!(
-            "no function named {name:?} in {} package(s)",
-            packages.len()
-        );
-    }
+fn pkg_list_json() -> Result<()> {
+    let prefs = Prefs::load()?;
+    let out: Vec<_> = package::list_all()?
+        .into_iter()
+        .map(|name| {
+            serde_json::json!({
+                "name": name,
+                "enabled": prefs.packages.enabled.iter().any(|p| p == &name),
+                "default": prefs.packages.default == name,
+            })
+        })
+        .collect();
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({ "packages": out }))?
+    );
     Ok(())
 }
-
-// --- JSON output (never colored) -------------------------------------------
 
 fn list_json(
     prefs: &Prefs,
@@ -358,28 +355,6 @@ fn list_json(
     println!(
         "{}",
         serde_json::to_string_pretty(&serde_json::json!({ "packages": out }))?
-    );
-    Ok(())
-}
-
-fn show_function_json(packages: &[String], name: &str) -> Result<()> {
-    let mut matches = Vec::new();
-    for pkg in packages {
-        for file in Package::function_files(pkg)? {
-            let script = file.file_name().and_then(|s| s.to_str()).unwrap_or("?");
-            for d in funcs::parse_functions(&file) {
-                if d.name == name {
-                    matches.push(serde_json::json!({
-                        "name": d.name, "package": pkg, "script": script,
-                        "path": file.display().to_string(), "doc": d.doc.join("\n"),
-                    }));
-                }
-            }
-        }
-    }
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&serde_json::json!({ "functions": matches }))?
     );
     Ok(())
 }
