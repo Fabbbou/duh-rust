@@ -79,7 +79,7 @@ pub fn run(host: &str, cleanup: bool, ssh_args: &[String]) -> Result<()> {
             "{}",
             crate::ui::dim(
                 "note: nothing flagged ssh-safe — connecting without injection.\n  \
-                 Flag entries with `duh add alias <n> <v> --ssh-safe`. See `duh where` and docs/ssh.md."
+                 Flag entries with `duh create alias <n> <v> --ssh-safe`. See `duh where` and docs/ssh.md."
             )
         );
     }

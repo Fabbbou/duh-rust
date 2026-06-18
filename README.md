@@ -26,7 +26,7 @@ echo 'eval "$(duh init --shell zsh)"'  >> ~/.zshrc
 ```
 
 Restart your shell. Done. The `duh init` snippet also enables **tab completion**
-(dynamic — `duh open <tab>` lists packages, `duh ls <tab>` lists filters, etc.).
+(dynamic — `duh open <tab>` lists packages, `duh get <tab>` lists resources, etc.).
 
 ## Updating
 
@@ -57,42 +57,56 @@ keep). Remember to remove the `eval "$(duh init ...)"` line from your shell rc.
 
 ## Usage
 
+The CLI is **kubectl-style**: `duh <verb> <resource> [name]`. Resources are
+`alias`, `export`, `fn`, `pkg`, `gitalias` (aliases like `aliases`, `package`,
+`func`, `git` also work).
+
 ```sh
-duh add alias ll "ls -al"        # add an alias (to the default package)
-duh add export EDITOR nvim        # add an export
-duh add fn greet                  # create a function (opens $EDITOR)
+duh create alias ll "ls -al"      # create an alias (in the default package)
+duh create export EDITOR nvim     # create an export
+duh create fn greet               # create a function (opens $EDITOR)
+duh create gitalias co checkout   # create a git alias in the package gitconfig
 
-duh rm alias ll                   # remove
-duh ls                            # list everything (shows each package + path)
-duh ls alias                      # list one kind
-duh ls --package work             # list one package
-duh ls fn                         # functions as a script → function tree, with docs
-duh ls --fn greet                 # full documentation for one function
-duh ls git                        # git aliases per package (from each gitconfig)
+duh delete alias ll               # remove an entry
+duh delete gitalias co            # remove a git alias
 
-duh add git alias co checkout     # add a git alias to the package gitconfig
-duh rm  git alias co              # remove it
+duh get                           # list everything (each package + path)
+duh get alias                     # list one kind
+duh get --package work            # list one package (-p for short)
+duh get fn                        # functions as a script → function tree, with docs
+duh get gitalias                  # git aliases per package (from each gitconfig)
+duh get pkg                       # list packages and their enabled state
+
+duh describe fn greet             # full documentation for one function
+duh describe pkg work             # detail for one package
 
 duh use                           # show the default (write-target) package
 duh use work                      # switch the default package
-duh edit                          # edit the default package's db.toml in $EDITOR
+duh edit pkg                      # edit the default package's db.toml in $EDITOR
+duh edit fn greet                 # edit a function in $EDITOR
 
 duh where                         # print every path duh uses
 duh open                          # open the default package folder in your editor
 duh open work                     # open a specific package folder
 duh doctor                        # diagnose your setup (wiring, conflicts, …)
 
-duh status                        # show sync state + which package add/rm target
+duh status                        # show sync state + which package create/delete target
 duh init                          # one-time rc wiring (run once)
 duh inject                        # the script that wiring runs each shell start
 duh man                           # render the man page (e.g. `duh man > duh.1`)
 ```
 
-Every `add`/`rm` prints which package it wrote to, so you always know the target.
+Every `create`/`delete` prints which package it wrote to, so you always know the
+target. Use `-p/--package` to act on a package other than the default.
 
 Output is colorized when writing to a terminal and plain when piped (`NO_COLOR`
 is respected). Add `--no-color` for plain colors, `--plain` for ASCII-only, or
-`--json` (on `ls`/`status`) for machine-readable output.
+`--json` (on `get`/`describe`/`status`) for machine-readable output.
+
+> **Migrating from ≤0.9?** The grammar changed in 0.10. See the
+> [migration table](CHANGELOG.md#0100) — in short: `add`→`create`, `rm`→`delete`,
+> `ls`→`get`, `ls --fn`→`describe fn`, and `pkg <op>` became flat verbs
+> (`duh enable`, `duh sync`, `duh create pkg`, …).
 
 ### Reloading
 
@@ -107,14 +121,14 @@ to the packages and config folders.
 Share config via git repositories:
 
 ```sh
-duh pkg create work                            # new empty local package
-duh pkg add https://github.com/you/dotfiles   # clone + enable
-duh pkg ls                                     # list packages
-duh pkg sync                                   # pull updates for all enabled
-duh pkg push dotfiles                          # commit + push your changes
-duh pkg enable dotfiles / duh pkg disable …
-duh pkg rename old new                         # rename a local package
-duh pkg export work / duh pkg import work.tar.gz  # share without git
+duh create pkg work                                    # new empty local package
+duh create pkg dotfiles --remote https://github.com/you/dotfiles  # clone + enable
+duh get pkg                                            # list packages
+duh sync                                               # pull updates for all enabled
+duh push dotfiles                                      # commit + push your changes
+duh enable dotfiles / duh disable …
+duh rename old new                                     # rename a local package
+duh export work / duh import work.tar.gz               # share without git
 ```
 
 Later-enabled packages override earlier ones, so a personal package can shadow a
@@ -141,7 +155,7 @@ includes); enabled packages only; never shipped over SSH.
 SSH injection is **opt-in**: only entries you flag are ever shipped to a remote.
 
 ```sh
-duh add alias ll "ls -al" --ssh-safe   # flag an entry as ssh-safe
+duh create alias ll "ls -al" --ssh-safe # flag an entry as ssh-safe
 duh ssh user@host                       # ships ONLY flagged entries
 duh ssh user@host --cleanup             # remove the injected snippet afterwards
 ```

@@ -16,10 +16,10 @@ fn duh(home: &TempDir) -> Command {
 }
 
 #[test]
-fn add_alias_then_inject_shows_it() {
+fn create_alias_then_inject_shows_it() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "ll", "ls -al"])
+        .args(["create", "alias", "ll", "ls -al"])
         .assert()
         .success();
     duh(&home)
@@ -30,10 +30,10 @@ fn add_alias_then_inject_shows_it() {
 }
 
 #[test]
-fn add_export_then_inject_shows_it() {
+fn create_export_then_inject_shows_it() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "export", "EDITOR", "nvim"])
+        .args(["create", "export", "EDITOR", "nvim"])
         .assert()
         .success();
     duh(&home)
@@ -47,7 +47,7 @@ fn add_export_then_inject_shows_it() {
 fn malicious_value_is_neutralized() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "x", "$(rm -rf /)"])
+        .args(["create", "alias", "x", "$(rm -rf /)"])
         .assert()
         .success();
     duh(&home)
@@ -61,20 +61,43 @@ fn malicious_value_is_neutralized() {
 fn invalid_alias_name_rejected() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "a;b", "x"])
+        .args(["create", "alias", "a;b", "x"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("invalid alias name"));
 }
 
 #[test]
-fn rm_alias_removes_it() {
+fn create_alias_without_value_errors() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "gone", "x"])
+        .args(["create", "alias", "ll"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("needs a value"));
+}
+
+#[test]
+fn create_fn_rejects_a_value() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["create", "fn", "greet", "echo hi"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("takes no value"));
+}
+
+#[test]
+fn delete_alias_removes_it() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["create", "alias", "gone", "x"])
         .assert()
         .success();
-    duh(&home).args(["rm", "alias", "gone"]).assert().success();
+    duh(&home)
+        .args(["delete", "alias", "gone"])
+        .assert()
+        .success();
     duh(&home)
         .args(["inject", "--quiet"])
         .assert()
@@ -83,17 +106,35 @@ fn rm_alias_removes_it() {
 }
 
 #[test]
-fn ls_lists_added_entries() {
+fn get_lists_created_entries() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "ll", "ls -al"])
+        .args(["create", "alias", "ll", "ls -al"])
         .assert()
         .success();
     duh(&home)
-        .args(["ls"])
+        .args(["get"])
         .assert()
         .success()
         .stdout(predicate::str::contains("ll").and(predicate::str::contains("ls -al")));
+}
+
+#[test]
+fn get_pkg_lists_packages() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["create", "alias", "seed", "x"])
+        .assert()
+        .success();
+    duh(&home)
+        .args(["create", "pkg", "work"])
+        .assert()
+        .success();
+    duh(&home)
+        .args(["get", "pkg"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("default").and(predicate::str::contains("work")));
 }
 
 #[test]
@@ -111,7 +152,7 @@ fn status_hook_prints_reload_when_stale() {
 fn status_hook_silent_when_in_sync() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "ll", "ls -al"])
+        .args(["create", "alias", "ll", "ls -al"])
         .assert()
         .success();
     duh(&home).args(["inject", "--quiet"]).assert().success();
@@ -124,13 +165,29 @@ fn status_hook_silent_when_in_sync() {
 }
 
 #[test]
-fn pkg_rm_rejects_path_traversal() {
+fn delete_pkg_rejects_path_traversal() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["pkg", "rm", "../../etc"])
+        .args(["delete", "pkg", "../../etc"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("invalid package name"));
+}
+
+#[test]
+fn delete_pkg_default_refused() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["create", "alias", "seed", "x"])
+        .assert()
+        .success();
+    duh(&home)
+        .args(["delete", "pkg", "default"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "refusing to remove the default package",
+        ));
 }
 
 #[test]
@@ -140,7 +197,7 @@ fn control_char_value_rejected_on_inject() {
     // is already blocked by the OS, so the file is the real vector.)
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "seed", "x"])
+        .args(["create", "alias", "seed", "x"])
         .assert()
         .success(); // bootstrap dirs
     let db = home.path().join("data/packages/default/db.toml");
@@ -159,7 +216,7 @@ fn inject_script_is_owner_only() {
         use std::os::unix::fs::PermissionsExt;
         let home = TempDir::new().unwrap();
         duh(&home)
-            .args(["add", "alias", "ll", "ls -al"])
+            .args(["create", "alias", "ll", "ls -al"])
             .assert()
             .success();
         duh(&home).args(["inject", "--quiet"]).assert().success();
@@ -183,7 +240,7 @@ fn init_emits_shell_snippet() {
 fn uninstall_yes_keeps_packages_removes_cache() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "ll", "ls -al"])
+        .args(["create", "alias", "ll", "ls -al"])
         .assert()
         .success();
     duh(&home).args(["inject", "--quiet"]).assert().success();
@@ -207,7 +264,7 @@ fn uninstall_yes_keeps_packages_removes_cache() {
 fn uninstall_purge_deletes_everything() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "ll", "ls -al"])
+        .args(["create", "alias", "ll", "ls -al"])
         .assert()
         .success();
     duh(&home).args(["inject", "--quiet"]).assert().success();
@@ -241,7 +298,7 @@ fn default_package_not_created_until_used() {
     // Commands that only bootstrap must NOT materialize the default package.
     duh(&home).args(["status"]).assert().success();
     duh(&home).args(["where"]).assert().success();
-    duh(&home).args(["ls"]).assert().success();
+    duh(&home).args(["get"]).assert().success();
     assert!(
         !default_dir.exists(),
         "bootstrap must not create the default package dir"
@@ -249,20 +306,20 @@ fn default_package_not_created_until_used() {
 
     // It appears only once something is actually written to it.
     duh(&home)
-        .args(["add", "alias", "ll", "ls -al"])
+        .args(["create", "alias", "ll", "ls -al"])
         .assert()
         .success();
     assert!(
         default_dir.exists(),
-        "default package should be created lazily on first add"
+        "default package should be created lazily on first create"
     );
 }
 
 #[test]
-fn add_echoes_target_package() {
+fn create_echoes_target_package() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "ll", "ls -al"])
+        .args(["create", "alias", "ll", "ls -al"])
         .assert()
         .success()
         .stdout(predicate::str::contains("package default"));
@@ -292,19 +349,19 @@ fn where_lists_paths() {
 }
 
 #[test]
-fn ls_package_filter_and_unknown() {
+fn get_package_filter_and_unknown() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "ll", "ls -al"])
+        .args(["create", "alias", "ll", "ls -al"])
         .assert()
         .success();
     duh(&home)
-        .args(["ls", "--package", "default"])
+        .args(["get", "--package", "default"])
         .assert()
         .success()
         .stdout(predicate::str::contains("default").and(predicate::str::contains("ls -al")));
     duh(&home)
-        .args(["ls", "--package", "nope"])
+        .args(["get", "--package", "nope"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("no package"));
@@ -314,16 +371,16 @@ fn ls_package_filter_and_unknown() {
 fn ssh_safe_only_filters_local_inject() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "safe", "ls", "--ssh-safe"])
+        .args(["create", "alias", "safe", "ls", "--ssh-safe"])
         .assert()
         .success();
     duh(&home)
-        .args(["add", "alias", "secret", "echo s"])
+        .args(["create", "alias", "secret", "echo s"])
         .assert()
         .success();
-    // Local inject shows both; ls marks the safe one.
+    // Local inject shows both; get marks the safe one.
     duh(&home)
-        .args(["ls"])
+        .args(["get"])
         .assert()
         .success()
         .stdout(predicate::str::contains("safe").and(predicate::str::contains("ssh-safe")));
@@ -341,17 +398,17 @@ fn reload_command_removed() {
 }
 
 #[test]
-fn fn_doc_comment_shown_in_ls() {
+fn fn_doc_comment_shown_in_get() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "seed", "x"])
+        .args(["create", "alias", "seed", "x"])
         .assert()
         .success();
     let dir = home.path().join("data/packages/default/functions");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("greet.sh"), "# says hello\ngreet() { echo hi; }\n").unwrap();
     duh(&home)
-        .args(["ls", "fn"])
+        .args(["get", "fn"])
         .assert()
         .success()
         .stdout(predicate::str::contains("greet").and(predicate::str::contains("says hello")));
@@ -370,7 +427,7 @@ fn inject_syncs_package_gitconfig_include() {
 
     // Package with a gitconfig file.
     duh(&home)
-        .args(["add", "alias", "seed", "x"])
+        .args(["create", "alias", "seed", "x"])
         .assert()
         .success();
     let pkg_gc = home.path().join("data/packages/default/gitconfig");
@@ -402,28 +459,28 @@ fn inject_syncs_package_gitconfig_include() {
 }
 
 #[test]
-fn add_git_alias_then_ls_git() {
+fn create_gitalias_then_get_gitalias() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "git", "alias", "co", "checkout"])
+        .args(["create", "gitalias", "co", "checkout"])
         .assert()
         .success();
     duh(&home)
-        .args(["add", "git", "alias", "st", "status"])
+        .args(["create", "gitalias", "st", "status"])
         .assert()
         .success();
     // Stored in the package gitconfig.
     let gc = std::fs::read_to_string(home.path().join("data/packages/default/gitconfig")).unwrap();
     assert!(gc.contains("co = checkout"), "gitconfig: {gc}");
-    // ls git shows them.
+    // get gitalias shows them.
     duh(&home)
-        .args(["ls", "git"])
+        .args(["get", "gitalias"])
         .assert()
         .success()
         .stdout(predicate::str::contains("co").and(predicate::str::contains("checkout")));
-    // rm removes one.
+    // delete removes one.
     duh(&home)
-        .args(["rm", "git", "alias", "co"])
+        .args(["delete", "gitalias", "co"])
         .assert()
         .success();
     let gc2 = std::fs::read_to_string(home.path().join("data/packages/default/gitconfig")).unwrap();
@@ -432,10 +489,10 @@ fn add_git_alias_then_ls_git() {
 }
 
 #[test]
-fn completion_lists_packages_and_filters() {
+fn completion_lists_packages_and_resources() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "ll", "ls -al"])
+        .args(["create", "alias", "ll", "ls -al"])
         .assert()
         .success();
     // open → package names
@@ -446,31 +503,31 @@ fn completion_lists_packages_and_filters() {
         .assert()
         .success()
         .stdout(predicate::str::contains("default"));
-    // ls → filters
+    // get <TAB> → resource words
     duh(&home)
         .env("COMPLETE", "bash")
         .env("_CLAP_COMPLETE_INDEX", "2")
-        .args(["--", "duh", "ls", ""])
+        .args(["--", "duh", "get", ""])
         .assert()
         .success()
-        .stdout(predicate::str::contains("git").and(predicate::str::contains("alias")));
+        .stdout(predicate::str::contains("alias").and(predicate::str::contains("pkg")));
 }
 
 #[test]
-fn pkg_rename_export_import_roundtrip() {
+fn rename_export_import_roundtrip() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["pkg", "create", "work"])
+        .args(["create", "pkg", "work"])
         .assert()
         .success();
     duh(&home).args(["use", "work"]).assert().success();
     duh(&home)
-        .args(["add", "alias", "k", "kubectl"])
+        .args(["create", "alias", "k", "kubectl"])
         .assert()
         .success();
 
     duh(&home)
-        .args(["pkg", "rename", "work", "prod"])
+        .args(["rename", "work", "prod"])
         .assert()
         .success();
     assert!(home.path().join("data/packages/prod").exists());
@@ -478,14 +535,14 @@ fn pkg_rename_export_import_roundtrip() {
 
     let archive = home.path().join("prod.tgz");
     duh(&home)
-        .args(["pkg", "export", "prod", "--out"])
+        .args(["export", "prod", "--out"])
         .arg(&archive)
         .assert()
         .success();
     assert!(archive.exists());
 
     duh(&home)
-        .args(["pkg", "import"])
+        .args(["import"])
         .arg(&archive)
         .arg("prod2")
         .assert()
@@ -504,25 +561,40 @@ fn man_renders_roff() {
 }
 
 #[test]
-fn edit_uses_editor() {
+fn edit_pkg_uses_editor() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "ll", "ls"])
+        .args(["create", "alias", "ll", "ls"])
         .assert()
         .success();
     duh(&home)
         .env("EDITOR", "true") // no-op editor
-        .args(["edit"])
+        .args(["edit", "pkg"])
         .assert()
         .success()
         .stdout(predicate::str::contains("edited package"));
 }
 
 #[test]
+fn edit_missing_fn_errors_with_hint() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["create", "alias", "seed", "x"])
+        .assert()
+        .success();
+    duh(&home)
+        .env("EDITOR", "true")
+        .args(["edit", "fn", "nope"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("create fn"));
+}
+
+#[test]
 fn schema_written_and_old_config_loads() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "ll", "ls -al"])
+        .args(["create", "alias", "ll", "ls -al"])
         .assert()
         .success();
     let db = home.path().join("data/packages/default/db.toml");
@@ -541,25 +613,25 @@ fn doctor_flags_missing_enabled_and_conflict() {
     let home = TempDir::new().unwrap();
     // Materialize the default package (enabled by default) so doctor is healthy.
     duh(&home)
-        .args(["add", "alias", "seed", "x"])
+        .args(["create", "alias", "seed", "x"])
         .assert()
         .success();
     // Two packages defining the same alias → conflict (warn).
-    duh(&home).args(["pkg", "create", "a"]).assert().success();
-    duh(&home).args(["pkg", "create", "b"]).assert().success();
+    duh(&home).args(["create", "pkg", "a"]).assert().success();
+    duh(&home).args(["create", "pkg", "b"]).assert().success();
     duh(&home).args(["use", "a"]).assert().success();
     duh(&home)
-        .args(["add", "alias", "g", "git a"])
+        .args(["create", "alias", "g", "git a"])
         .assert()
         .success();
     duh(&home).args(["use", "b"]).assert().success();
     duh(&home)
-        .args(["add", "alias", "g", "git b"])
+        .args(["create", "alias", "g", "git b"])
         .assert()
         .success();
-    // ls shows the shadow marker.
+    // get shows the shadow marker.
     duh(&home)
-        .args(["ls"])
+        .args(["get"])
         .assert()
         .success()
         .stdout(predicate::str::contains("shadowed by"));
@@ -580,10 +652,10 @@ fn doctor_flags_missing_enabled_and_conflict() {
 }
 
 #[test]
-fn use_and_pkg_create() {
+fn use_and_create_pkg() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "ll", "ls -al"])
+        .args(["create", "alias", "ll", "ls -al"])
         .assert()
         .success();
     // bare use → current default
@@ -594,7 +666,7 @@ fn use_and_pkg_create() {
         .stdout(predicate::str::contains("default"));
     // create a new local package
     duh(&home)
-        .args(["pkg", "create", "work"])
+        .args(["create", "pkg", "work"])
         .assert()
         .success()
         .stdout(predicate::str::contains("created"));
@@ -610,9 +682,9 @@ fn use_and_pkg_create() {
         .assert()
         .success()
         .stdout(predicate::str::contains("work"));
-    // add now targets the new default
+    // create now targets the new default
     duh(&home)
-        .args(["add", "alias", "k", "kubectl"])
+        .args(["create", "alias", "k", "kubectl"])
         .assert()
         .success();
     assert!(
@@ -629,11 +701,34 @@ fn use_and_pkg_create() {
 }
 
 #[test]
+fn create_with_package_flag_targets_it() {
+    let home = TempDir::new().unwrap();
+    duh(&home)
+        .args(["create", "alias", "seed", "x"])
+        .assert()
+        .success();
+    duh(&home)
+        .args(["create", "pkg", "work"])
+        .assert()
+        .success();
+    // -p targets a non-default package without switching the default.
+    duh(&home)
+        .args(["create", "alias", "k", "kubectl", "-p", "work"])
+        .assert()
+        .success();
+    assert!(
+        std::fs::read_to_string(home.path().join("data/packages/work/db.toml"))
+            .unwrap()
+            .contains("kubectl")
+    );
+}
+
+#[test]
 fn machine_output_has_no_ansi() {
     // The eval'd paths must never carry color codes, even if forced on.
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "ll", "ls -al"])
+        .args(["create", "alias", "ll", "ls -al"])
         .assert()
         .success();
     for args in [
@@ -648,13 +743,13 @@ fn machine_output_has_no_ansi() {
 }
 
 #[test]
-fn ls_json_is_valid_and_uncolored() {
+fn get_json_is_valid_and_uncolored() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "ll", "ls -al", "--ssh-safe"])
+        .args(["create", "alias", "ll", "ls -al", "--ssh-safe"])
         .assert()
         .success();
-    let out = duh(&home).args(["ls", "--json"]).output().unwrap();
+    let out = duh(&home).args(["get", "--json"]).output().unwrap();
     let s = String::from_utf8(out.stdout).unwrap();
     assert!(!s.contains('\u{1b}'), "json must not be colored");
     let v: serde_json::Value = serde_json::from_str(&s).expect("valid json");
@@ -668,7 +763,7 @@ fn ls_json_is_valid_and_uncolored() {
 fn status_json_reports_counts() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "ll", "ls -al"])
+        .args(["create", "alias", "ll", "ls -al"])
         .assert()
         .success();
     let out = duh(&home).args(["status", "--json"]).output().unwrap();
@@ -681,10 +776,10 @@ fn status_json_reports_counts() {
 fn plain_is_ascii_only() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "ll", "ls -al"])
+        .args(["create", "alias", "ll", "ls -al"])
         .assert()
         .success();
-    let out = duh(&home).args(["ls", "--plain"]).output().unwrap();
+    let out = duh(&home).args(["get", "--plain"]).output().unwrap();
     let s = String::from_utf8(out.stdout).unwrap();
     assert!(s.is_ascii(), "--plain output must be ASCII-only: {s:?}");
     assert!(!s.contains('\u{1b}'));
@@ -698,10 +793,10 @@ fn write_fn(home: &TempDir, file: &str, body: &str) {
 }
 
 #[test]
-fn ls_fn_shows_script_function_tree() {
+fn get_fn_shows_script_function_tree() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "seed", "x"])
+        .args(["create", "alias", "seed", "x"])
         .assert()
         .success();
     write_fn(
@@ -709,7 +804,7 @@ fn ls_fn_shows_script_function_tree() {
         "git.sh",
         "#!/usr/bin/env bash\n# git status, short\ngs() { git status -s; }\n",
     );
-    duh(&home).args(["ls", "fn"]).assert().success().stdout(
+    duh(&home).args(["get", "fn"]).assert().success().stdout(
         predicate::str::contains("git.sh")
             .and(predicate::str::contains("gs"))
             .and(predicate::str::contains("git status, short")),
@@ -717,10 +812,10 @@ fn ls_fn_shows_script_function_tree() {
 }
 
 #[test]
-fn ls_fn_flag_shows_full_doc() {
+fn describe_fn_shows_full_doc() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "seed", "x"])
+        .args(["create", "alias", "seed", "x"])
         .assert()
         .success();
     write_fn(
@@ -730,7 +825,7 @@ fn ls_fn_flag_shows_full_doc() {
     );
     // Describe view: script name, path, package, and the full doc block.
     duh(&home)
-        .args(["ls", "--fn", "greet"])
+        .args(["describe", "fn", "greet"])
         .assert()
         .success()
         .stdout(
@@ -741,7 +836,7 @@ fn ls_fn_flag_shows_full_doc() {
                 .and(predicate::str::contains("politely")),
         );
     duh(&home)
-        .args(["ls", "--fn", "nope"])
+        .args(["describe", "fn", "nope"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("no function named"));
@@ -751,7 +846,7 @@ fn ls_fn_flag_shows_full_doc() {
 fn inject_strips_leading_shebang() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "seed", "x"])
+        .args(["create", "alias", "seed", "x"])
         .assert()
         .success();
     write_fn(&home, "f.sh", "#!/usr/bin/env bash\ngreet() { echo hi; }\n");
@@ -768,11 +863,11 @@ fn inject_strips_leading_shebang() {
 fn generated_script_is_valid_bash() {
     let home = TempDir::new().unwrap();
     duh(&home)
-        .args(["add", "alias", "ll", "ls -al"])
+        .args(["create", "alias", "ll", "ls -al"])
         .assert()
         .success();
     duh(&home)
-        .args(["add", "export", "FOO", "a'b\"c $x"])
+        .args(["create", "export", "FOO", "a'b\"c $x"])
         .assert()
         .success();
     let out = duh(&home).args(["inject", "--quiet"]).output().unwrap();

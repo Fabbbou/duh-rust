@@ -103,7 +103,7 @@ Next steps — wire duh into your shell:
 
 Then restart your shell and try:
 
-  duh add alias ll "ls -al"
-  duh ls
+  duh create alias ll "ls -al"
+  duh get
 
 EOF

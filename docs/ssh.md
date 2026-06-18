@@ -7,8 +7,8 @@ machine unless you flag it.
 ## TL;DR
 
 ```sh
-duh add alias ll "ls -al" --ssh-safe     # flag an alias as ssh-safe
-duh add export EDITOR nvim --ssh-safe     # flag an export as ssh-safe
+duh create alias ll "ls -al" --ssh-safe   # flag an alias as ssh-safe
+duh create export EDITOR nvim --ssh-safe  # flag an export as ssh-safe
 duh ssh user@host                          # ships ONLY the flagged entries
 ```
 
@@ -68,9 +68,9 @@ packages are shipped.
 
 ## Managing flags
 
-- Flag while adding: `duh add alias g "git" --ssh-safe`
-- See what's flagged: `duh ls` shows an `[ssh-safe]` marker next to each entry.
-- Unflag: remove and re-add without `--ssh-safe`, or `duh rm alias g` (removing
+- Flag while creating: `duh create alias g "git" --ssh-safe`
+- See what's flagged: `duh get` shows an `[ssh-safe]` marker next to each entry.
+- Unflag: re-create without `--ssh-safe`, or `duh delete alias g` (removing
   an entry also clears its ssh-safe flag).
 
 ## Security notes
