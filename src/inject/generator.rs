@@ -104,24 +104,21 @@ pub fn generate(opts: &GenOptions) -> Result<String> {
     Ok(out)
 }
 
-/// Shell functions injected into the local shell only.
+/// Shell functions injected into the local shell only. These must be shell
+/// functions, not `duh` subcommands: a child process can't change the parent
+/// shell's cwd (`duh-cd`) or re-inject into it (`duh-reload`).
 fn shell_helpers(quiet: bool) -> Result<String> {
     let packages_dir = paths::packages_dir()?;
-    let config_dir = paths::config_dir()?;
     let mut s = String::new();
     if !quiet {
         s.push_str("# duh: shell helpers\n");
     }
-    // Re-eval in the *current* shell — the honest version of the old `reload`.
-    s.push_str("duh-reload() { eval \"$(duh inject --quiet)\"; }\n");
-    // Safe cd helpers: only cd if the directory exists.
+    // Re-eval in the *current* shell.
+    s.push_str("duh-reload() { eval \"$(duh _internal emit --quiet)\"; }\n");
+    // Safe cd helper: only cd if the directory exists.
     s.push_str(&format!(
         "duh-cd() {{ [ -d {dir} ] && cd {dir} || echo 'duh: packages dir missing' >&2; }}\n",
         dir = escape::single_quote(&packages_dir.to_string_lossy())
-    ));
-    s.push_str(&format!(
-        "duh-cd-config() {{ [ -d {dir} ] && cd {dir} || echo 'duh: config dir missing' >&2; }}\n",
-        dir = escape::single_quote(&config_dir.to_string_lossy())
     ));
     Ok(s)
 }
@@ -153,32 +150,4 @@ fn reject_control_chars(kind: &str, name: &str, value: &str) -> Result<()> {
         );
     }
     Ok(())
-}
-
-/// Summary counts for `duh status` (human-readable).
-pub struct Counts {
-    pub packages: usize,
-    pub aliases: usize,
-    pub exports: usize,
-    pub functions: usize,
-}
-
-pub fn counts() -> Result<Counts> {
-    let prefs = Prefs::load()?;
-    let packages = prefs.enabled_existing()?;
-    let mut aliases = 0;
-    let mut exports = 0;
-    let mut functions = 0;
-    for name in &packages {
-        let pkg = Package::load(name)?;
-        aliases += pkg.aliases.len();
-        exports += pkg.exports.len();
-        functions += Package::function_files(name)?.len();
-    }
-    Ok(Counts {
-        packages: packages.len(),
-        aliases,
-        exports,
-        functions,
-    })
 }

@@ -109,7 +109,7 @@ fn shell_wired() -> Option<String> {
     let home = directories::BaseDirs::new()?.home_dir().to_path_buf();
     for rc in [".bashrc", ".zshrc", ".bash_profile", ".profile"] {
         if let Ok(text) = fs::read_to_string(home.join(rc)) {
-            if text.contains("duh inject") || text.contains("duh init") {
+            if text.contains("duh init") || text.contains("duh _internal") {
                 return Some(rc.to_string());
             }
         }
