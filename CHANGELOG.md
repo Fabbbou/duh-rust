@@ -3,6 +3,30 @@
 All notable changes to duh are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com); duh uses semantic versioning.
 
+## [0.11.0]
+
+**BREAKING — decluttered command surface.** Machine-only commands are hidden,
+low-value ones removed, and package lifecycle ops are grouped under `duh pkg`.
+
+### Changed
+- Package lifecycle verbs moved back under `duh pkg`:
+  `duh pkg enable|disable|rename|sync|push|export|import|open`
+  (`duh open` → `duh pkg open`). Package CRUD stays verb-noun
+  (`create pkg` / `get pkg` / `delete pkg`); `duh use` stays top-level.
+
+### Removed
+- `duh inject` and `duh status` — these were the shell-hook engine, not things you
+  type. They became hidden commands: `duh _internal emit` (write cache + print the
+  eval script) and `duh _internal hook` (per-prompt staleness check). `duh init`
+  now wires those; `duh-reload` re-evals `duh _internal emit`.
+- `duh man` (and the `clap_mangen` dependency).
+- The auto `help` subcommand (`-h` / `--help` still work).
+- The `duh-cd-config` shell helper (low value); `duh-cd` stays.
+
+### Notes
+- A child process can't change the parent shell's cwd or environment, so `duh-cd`
+  and `duh-reload` remain shell functions rather than subcommands by necessity.
+
 ## [0.10.0]
 
 **BREAKING — new kubectl-style grammar.** Every command is now

@@ -25,7 +25,7 @@ pub fn run() -> Result<()> {
     }
     println!(
         "\n{}",
-        ui::dim("shortcuts: `duh-cd` → packages, `duh-cd-config` → config (after a shell reload)")
+        ui::dim("shortcut: `duh-cd` → packages (after a shell reload)")
     );
     Ok(())
 }

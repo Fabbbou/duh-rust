@@ -28,8 +28,8 @@ fn detect() -> Shell {
 
 const BASH: &str = r#"# duh shell integration (bash) — add to ~/.bashrc:
 #   eval "$(duh init --shell bash)"
-eval "$(duh inject --quiet)"
-__duh_hook() { eval "$(duh status --hook)"; }
+eval "$(duh _internal emit --quiet)"
+__duh_hook() { eval "$(duh _internal hook)"; }
 case "$PROMPT_COMMAND" in
   *__duh_hook*) ;;
   *) PROMPT_COMMAND="__duh_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}" ;;
@@ -40,8 +40,8 @@ source <(COMPLETE=bash duh)
 
 const ZSH: &str = r#"# duh shell integration (zsh) — add to ~/.zshrc:
 #   eval "$(duh init --shell zsh)"
-eval "$(duh inject --quiet)"
-__duh_hook() { eval "$(duh status --hook)"; }
+eval "$(duh _internal emit --quiet)"
+__duh_hook() { eval "$(duh _internal hook)"; }
 autoload -Uz add-zsh-hook
 add-zsh-hook precmd __duh_hook
 # tab completion

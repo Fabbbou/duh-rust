@@ -23,7 +23,7 @@ fn create_alias_then_inject_shows_it() {
         .assert()
         .success();
     duh(&home)
-        .args(["inject", "--quiet"])
+        .args(["_internal", "emit", "--quiet"])
         .assert()
         .success()
         .stdout(predicate::str::contains("alias ll='ls -al'"));
@@ -37,7 +37,7 @@ fn create_export_then_inject_shows_it() {
         .assert()
         .success();
     duh(&home)
-        .args(["inject", "--quiet"])
+        .args(["_internal", "emit", "--quiet"])
         .assert()
         .success()
         .stdout(predicate::str::contains("export EDITOR='nvim'"));
@@ -51,7 +51,7 @@ fn malicious_value_is_neutralized() {
         .assert()
         .success();
     duh(&home)
-        .args(["inject", "--quiet"])
+        .args(["_internal", "emit", "--quiet"])
         .assert()
         .success()
         .stdout(predicate::str::contains("alias x='$(rm -rf /)'"));
@@ -99,7 +99,7 @@ fn delete_alias_removes_it() {
         .assert()
         .success();
     duh(&home)
-        .args(["inject", "--quiet"])
+        .args(["_internal", "emit", "--quiet"])
         .assert()
         .success()
         .stdout(predicate::str::contains("gone").not());
@@ -142,10 +142,10 @@ fn status_hook_prints_reload_when_stale() {
     let home = TempDir::new().unwrap();
     // No cache yet → hook should emit a reload command.
     duh(&home)
-        .args(["status", "--hook"])
+        .args(["_internal", "hook"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("duh inject --quiet"));
+        .stdout(predicate::str::contains("duh _internal emit --quiet"));
 }
 
 #[test]
@@ -155,10 +155,13 @@ fn status_hook_silent_when_in_sync() {
         .args(["create", "alias", "ll", "ls -al"])
         .assert()
         .success();
-    duh(&home).args(["inject", "--quiet"]).assert().success();
+    duh(&home)
+        .args(["_internal", "emit", "--quiet"])
+        .assert()
+        .success();
     // Immediately after inject, nothing changed → hook is silent.
     duh(&home)
-        .args(["status", "--hook"])
+        .args(["_internal", "hook"])
         .assert()
         .success()
         .stdout(predicate::str::is_empty());
@@ -203,7 +206,7 @@ fn control_char_value_rejected_on_inject() {
     let db = home.path().join("data/packages/default/db.toml");
     std::fs::write(&db, "[exports]\nFOO = \"a\\u0007b\"\n").unwrap();
     duh(&home)
-        .args(["inject", "--quiet"])
+        .args(["_internal", "emit", "--quiet"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("control character"));
@@ -219,7 +222,10 @@ fn inject_script_is_owner_only() {
             .args(["create", "alias", "ll", "ls -al"])
             .assert()
             .success();
-        duh(&home).args(["inject", "--quiet"]).assert().success();
+        duh(&home)
+            .args(["_internal", "emit", "--quiet"])
+            .assert()
+            .success();
         let script = home.path().join("cache/inject.sh");
         let mode = std::fs::metadata(&script).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o600, "inject.sh must be 0600, got {mode:o}");
@@ -243,7 +249,10 @@ fn uninstall_yes_keeps_packages_removes_cache() {
         .args(["create", "alias", "ll", "ls -al"])
         .assert()
         .success();
-    duh(&home).args(["inject", "--quiet"]).assert().success();
+    duh(&home)
+        .args(["_internal", "emit", "--quiet"])
+        .assert()
+        .success();
     assert!(home.path().join("cache").exists());
 
     duh(&home)
@@ -267,7 +276,10 @@ fn uninstall_purge_deletes_everything() {
         .args(["create", "alias", "ll", "ls -al"])
         .assert()
         .success();
-    duh(&home).args(["inject", "--quiet"]).assert().success();
+    duh(&home)
+        .args(["_internal", "emit", "--quiet"])
+        .assert()
+        .success();
 
     duh(&home)
         .env("DUH_KEEP_BINARY", "1")
@@ -296,7 +308,7 @@ fn default_package_not_created_until_used() {
     let default_dir = home.path().join("data/packages/default");
 
     // Commands that only bootstrap must NOT materialize the default package.
-    duh(&home).args(["status"]).assert().success();
+    duh(&home).args(["_internal", "hook"]).assert().success();
     duh(&home).args(["where"]).assert().success();
     duh(&home).args(["get"]).assert().success();
     assert!(
@@ -328,14 +340,13 @@ fn create_echoes_target_package() {
 #[test]
 fn inject_includes_shell_helpers() {
     let home = TempDir::new().unwrap();
-    let out = duh(&home).args(["inject", "--quiet"]).output().unwrap();
+    let out = duh(&home)
+        .args(["_internal", "emit", "--quiet"])
+        .output()
+        .unwrap();
     let script = String::from_utf8(out.stdout).unwrap();
     assert!(script.contains("duh-reload()"), "missing duh-reload helper");
     assert!(script.contains("duh-cd()"), "missing duh-cd helper");
-    assert!(
-        script.contains("duh-cd-config()"),
-        "missing duh-cd-config helper"
-    );
 }
 
 #[test]
@@ -385,7 +396,7 @@ fn ssh_safe_only_filters_local_inject() {
         .success()
         .stdout(predicate::str::contains("safe").and(predicate::str::contains("ssh-safe")));
     duh(&home)
-        .args(["inject", "--quiet"])
+        .args(["_internal", "emit", "--quiet"])
         .assert()
         .success()
         .stdout(predicate::str::contains("alias secret="));
@@ -436,7 +447,7 @@ fn inject_syncs_package_gitconfig_include() {
     let run = || {
         duh(&home)
             .env("DUH_GITCONFIG", &gitconfig)
-            .args(["inject", "--quiet"])
+            .args(["_internal", "emit", "--quiet"])
             .assert()
             .success();
     };
@@ -495,11 +506,11 @@ fn completion_lists_packages_and_resources() {
         .args(["create", "alias", "ll", "ls -al"])
         .assert()
         .success();
-    // open → package names
+    // use → package names
     duh(&home)
         .env("COMPLETE", "bash")
         .env("_CLAP_COMPLETE_INDEX", "2")
-        .args(["--", "duh", "open", ""])
+        .args(["--", "duh", "use", ""])
         .assert()
         .success()
         .stdout(predicate::str::contains("default"));
@@ -527,7 +538,7 @@ fn rename_export_import_roundtrip() {
         .success();
 
     duh(&home)
-        .args(["rename", "work", "prod"])
+        .args(["pkg", "rename", "work", "prod"])
         .assert()
         .success();
     assert!(home.path().join("data/packages/prod").exists());
@@ -535,29 +546,19 @@ fn rename_export_import_roundtrip() {
 
     let archive = home.path().join("prod.tgz");
     duh(&home)
-        .args(["export", "prod", "--out"])
+        .args(["pkg", "export", "prod", "--out"])
         .arg(&archive)
         .assert()
         .success();
     assert!(archive.exists());
 
     duh(&home)
-        .args(["import"])
+        .args(["pkg", "import"])
         .arg(&archive)
         .arg("prod2")
         .assert()
         .success();
     assert!(home.path().join("data/packages/prod2/db.toml").exists());
-}
-
-#[test]
-fn man_renders_roff() {
-    let home = TempDir::new().unwrap();
-    duh(&home)
-        .args(["man"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains(".TH").or(predicate::str::contains("duh")));
 }
 
 #[test]
@@ -602,7 +603,7 @@ fn schema_written_and_old_config_loads() {
     // A db.toml without a schema field still loads (treated as v1).
     std::fs::write(&db, "[aliases]\nzz = \"echo z\"\n").unwrap();
     duh(&home)
-        .args(["inject", "--quiet"])
+        .args(["_internal", "emit", "--quiet"])
         .assert()
         .success()
         .stdout(predicate::str::contains("alias zz="));
@@ -732,8 +733,8 @@ fn machine_output_has_no_ansi() {
         .assert()
         .success();
     for args in [
-        vec!["inject", "--quiet"],
-        vec!["status", "--hook"],
+        vec!["_internal", "emit", "--quiet"],
+        vec!["_internal", "hook"],
         vec!["init", "--shell", "bash"],
     ] {
         let out = duh(&home).args(&args).output().unwrap();
@@ -757,19 +758,6 @@ fn get_json_is_valid_and_uncolored() {
     assert_eq!(alias["name"], "ll");
     assert_eq!(alias["value"], "ls -al");
     assert_eq!(alias["ssh_safe"], true);
-}
-
-#[test]
-fn status_json_reports_counts() {
-    let home = TempDir::new().unwrap();
-    duh(&home)
-        .args(["create", "alias", "ll", "ls -al"])
-        .assert()
-        .success();
-    let out = duh(&home).args(["status", "--json"]).output().unwrap();
-    let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("valid json");
-    assert_eq!(v["aliases"], 1);
-    assert_eq!(v["default"], "default");
 }
 
 #[test]
@@ -850,7 +838,10 @@ fn inject_strips_leading_shebang() {
         .assert()
         .success();
     write_fn(&home, "f.sh", "#!/usr/bin/env bash\ngreet() { echo hi; }\n");
-    let out = duh(&home).args(["inject", "--quiet"]).output().unwrap();
+    let out = duh(&home)
+        .args(["_internal", "emit", "--quiet"])
+        .output()
+        .unwrap();
     let script = String::from_utf8(out.stdout).unwrap();
     assert!(
         !script.contains("#!/usr/bin/env bash"),
@@ -870,7 +861,10 @@ fn generated_script_is_valid_bash() {
         .args(["create", "export", "FOO", "a'b\"c $x"])
         .assert()
         .success();
-    let out = duh(&home).args(["inject", "--quiet"]).output().unwrap();
+    let out = duh(&home)
+        .args(["_internal", "emit", "--quiet"])
+        .output()
+        .unwrap();
     let script = String::from_utf8(out.stdout).unwrap();
     // The local inject targets bash/zsh (where `duh init` wires it); the
     // injected helpers use bash-valid function names. Validate with `bash -n`.

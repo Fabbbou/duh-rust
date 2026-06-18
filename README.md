@@ -26,7 +26,7 @@ echo 'eval "$(duh init --shell zsh)"'  >> ~/.zshrc
 ```
 
 Restart your shell. Done. The `duh init` snippet also enables **tab completion**
-(dynamic — `duh open <tab>` lists packages, `duh get <tab>` lists resources, etc.).
+(dynamic — `duh use <tab>` lists packages, `duh get <tab>` lists resources, etc.).
 
 ## Updating
 
@@ -86,14 +86,8 @@ duh edit pkg                      # edit the default package's db.toml in $EDITO
 duh edit fn greet                 # edit a function in $EDITOR
 
 duh where                         # print every path duh uses
-duh open                          # open the default package folder in your editor
-duh open work                     # open a specific package folder
 duh doctor                        # diagnose your setup (wiring, conflicts, …)
-
-duh status                        # show sync state + which package create/delete target
 duh init                          # one-time rc wiring (run once)
-duh inject                        # the script that wiring runs each shell start
-duh man                           # render the man page (e.g. `duh man > duh.1`)
 ```
 
 Every `create`/`delete` prints which package it wrote to, so you always know the
@@ -101,20 +95,24 @@ target. Use `-p/--package` to act on a package other than the default.
 
 Output is colorized when writing to a terminal and plain when piped (`NO_COLOR`
 is respected). Add `--no-color` for plain colors, `--plain` for ASCII-only, or
-`--json` (on `get`/`describe`/`status`) for machine-readable output.
+`--json` (on `get`/`describe`) for machine-readable output.
 
-> **Migrating from ≤0.9?** The grammar changed in 0.10. See the
-> [migration table](CHANGELOG.md#0100) — in short: `add`→`create`, `rm`→`delete`,
-> `ls`→`get`, `ls --fn`→`describe fn`, and `pkg <op>` became flat verbs
-> (`duh enable`, `duh sync`, `duh create pkg`, …).
+The shell integration calls two hidden commands (`duh _internal emit` at shell
+start, `duh _internal hook` each prompt). You never type them — they're omitted
+from `--help` on purpose.
+
+> **Migrating from ≤0.10?** In 0.11 the package lifecycle verbs moved back under
+> `duh pkg` (`duh pkg enable/disable/rename/sync/push/export/import/open`), and
+> `duh inject` / `duh status` / `duh man` were removed (the first two became
+> `duh _internal emit` / `duh _internal hook`; diagnostics live in `duh doctor`).
 
 ### Reloading
 
 The per-prompt hook auto-reloads your shell on the next prompt after any change.
 To apply immediately in the current shell, the injected `duh-reload` function
 re-evals on the spot. (There is no `duh reload` command — a child process can't
-reload its parent shell; a shell function can.) `duh-cd` / `duh-cd-config` jump
-to the packages and config folders.
+reload its parent shell; a shell function can.) `duh-cd` jumps to the packages
+folder.
 
 ### Packages
 
@@ -124,11 +122,12 @@ Share config via git repositories:
 duh create pkg work                                    # new empty local package
 duh create pkg dotfiles --remote https://github.com/you/dotfiles  # clone + enable
 duh get pkg                                            # list packages
-duh sync                                               # pull updates for all enabled
-duh push dotfiles                                      # commit + push your changes
-duh enable dotfiles / duh disable …
-duh rename old new                                     # rename a local package
-duh export work / duh import work.tar.gz               # share without git
+duh pkg sync                                           # pull updates for all enabled
+duh pkg push dotfiles                                  # commit + push your changes
+duh pkg enable dotfiles / duh pkg disable …
+duh pkg rename old new                                 # rename a local package
+duh pkg export work / duh pkg import work.tar.gz       # share without git
+duh pkg open work                                      # open a package folder in your editor
 ```
 
 Later-enabled packages override earlier ones, so a personal package can shadow a
@@ -168,9 +167,9 @@ model — are in **[docs/ssh.md](docs/ssh.md)**.
 
 ## How the zero-latency check works
 
-`duh inject` writes the generated script, a flat list of source files, and an
-aggregate change stamp into the cache dir. The per-prompt hook
-(`duh status --hook`) only `stat()`s those files and compares the stamp — no TOML
+`duh _internal emit` writes the generated script, a flat list of source files, and
+an aggregate change stamp into the cache dir. The per-prompt hook
+(`duh _internal hook`) only `stat()`s those files and compares the stamp — no TOML
 parsing on the hot path. It prints a reload command **only** when something
 changed, so a steady-state prompt pays just a few `stat` syscalls.
 

@@ -2,7 +2,8 @@
 //!
 //! Grammar is kubectl-style: `duh VERB RESOURCE [NAME]`. The CRUD verbs
 //! (`get`/`create`/`edit`/`delete`/`describe`) take a positional [`Resource`];
-//! package lifecycle ops are flat top-level verbs (`enable`, `sync`, …).
+//! package lifecycle ops live under `duh pkg`. Machine-only commands the shell
+//! wiring calls are hidden under `duh _internal`.
 
 mod complete;
 mod create;
@@ -13,12 +14,12 @@ mod edit;
 mod editor;
 mod get;
 mod init;
-mod man;
+mod internal;
 mod open;
+mod pkg;
 mod pkgops;
 mod resource;
 mod ssh;
-mod status;
 mod uninstall;
 mod upgrade;
 mod use_pkg;
@@ -33,14 +34,13 @@ use resource::Resource;
 #[command(
     name = "duh",
     version,
+    disable_help_subcommand = true,
     about = "Inject your shell config (aliases, exports, functions) everywhere",
     long_about = "duh manages shell aliases, exports, and functions in TOML packages \
                   and injects them into your shell — fast, direnv-style.\n\n\
                   Grammar is kubectl-style: `duh <verb> <resource> [name]`, e.g. \
                   `duh create alias gs 'git status'` or `duh get alias`.\n\n\
-                  Quick start: add `eval \"$(duh init)\"` to your shell rc.\n\
-                  `init` wires duh into your rc once; `inject` is the script that \
-                  wiring runs on each shell start (you rarely call it directly)."
+                  Quick start: add `eval \"$(duh init)\"` to your shell rc."
 )]
 pub struct Cli {
     /// Disable colored output
@@ -129,71 +129,15 @@ enum Command {
         #[arg(add = ArgValueCandidates::new(complete::packages))]
         pkg: Option<String>,
     },
-    /// Enable a package for injection
-    Enable {
-        #[arg(add = ArgValueCandidates::new(complete::packages))]
-        pkg: String,
-    },
-    /// Disable a package
-    Disable {
-        #[arg(add = ArgValueCandidates::new(complete::packages))]
-        pkg: String,
-    },
-    /// Rename a local package
-    Rename {
-        #[arg(add = ArgValueCandidates::new(complete::packages))]
-        old: String,
-        new: String,
-    },
-    /// Pull updates for all enabled remote packages
-    Sync,
-    /// Commit and push local changes of a package
-    Push {
-        #[arg(add = ArgValueCandidates::new(complete::packages))]
-        pkg: String,
-    },
-    /// Export a package to a .tar.gz (share without git)
-    Export {
-        #[arg(add = ArgValueCandidates::new(complete::packages))]
-        pkg: String,
-        /// Output file (default: ./duh-<pkg>.tar.gz)
-        #[arg(long)]
-        out: Option<String>,
-    },
-    /// Import a package from a .tar.gz produced by `export`
-    Import {
-        file: String,
-        /// Local name (default: the archived package name)
-        name: Option<String>,
-    },
-    /// Open a package folder with your configured tool (vscode, nvim, …)
-    Open {
-        /// Package to open (defaults to the default package)
-        #[arg(add = ArgValueCandidates::new(complete::packages))]
-        package: Option<String>,
+    /// Manage packages (enable/disable/rename/sync/push/export/import/open)
+    Pkg {
+        #[command(subcommand)]
+        cmd: pkg::PkgCmd,
     },
     /// Diagnose your duh setup (shell wiring, packages, conflicts, git includes)
     Doctor,
     /// Print where duh stores everything (data, config, cache, packages…)
     Where,
-    /// Render the man page (roff) to stdout
-    Man,
-    /// Emit the generated alias/export/function script (run on every shell start
-    /// by the rc wiring; you rarely call this directly)
-    Inject {
-        /// Suppress comments (recommended for rc files)
-        #[arg(long)]
-        quiet: bool,
-    },
-    /// direnv-style change check; with --hook, prints a reload command if stale
-    Status {
-        /// Per-prompt mode: stat-only, prints reload command when stale
-        #[arg(long)]
-        hook: bool,
-        /// Output machine-readable JSON (ignored with --hook)
-        #[arg(long)]
-        json: bool,
-    },
     /// Print the one-time shell rc wiring (run once: add `eval "$(duh init)"`)
     Init {
         /// Target shell (auto-detected from $SHELL if omitted)
@@ -227,6 +171,9 @@ enum Command {
         #[arg(long)]
         purge: bool,
     },
+    /// Machine-only commands the shell wiring calls (you never type these)
+    #[command(name = "_internal", hide = true, subcommand)]
+    Internal(internal::InternalCmd),
 }
 
 impl Cli {
@@ -235,10 +182,9 @@ impl Cli {
         // The per-prompt hook must stay stat-only: never bootstrap there.
         let skip_bootstrap = matches!(
             self.command,
-            Command::Status { hook: true, .. }
+            Command::Internal(internal::InternalCmd::Hook)
                 | Command::Uninstall { .. }
                 | Command::Upgrade { .. }
-                | Command::Man
         );
         if !skip_bootstrap {
             config::bootstrap()?;
@@ -275,19 +221,9 @@ impl Cli {
                 json,
             } => describe::run(resource, name, package, json),
             Command::Use { pkg } => use_pkg::run(pkg),
-            Command::Enable { pkg } => pkgops::set_enabled(&pkg, true),
-            Command::Disable { pkg } => pkgops::set_enabled(&pkg, false),
-            Command::Rename { old, new } => pkgops::rename(&old, &new),
-            Command::Sync => pkgops::sync(),
-            Command::Push { pkg } => pkgops::push(&pkg),
-            Command::Export { pkg, out } => pkgops::export(&pkg, out),
-            Command::Import { file, name } => pkgops::import(&file, name),
-            Command::Open { package } => open::run(package),
+            Command::Pkg { cmd } => pkg::run(cmd),
             Command::Doctor => doctor::run(),
             Command::Where => where_cmd::run(),
-            Command::Man => man::run(),
-            Command::Inject { quiet } => status::inject(quiet),
-            Command::Status { hook, json } => status::status(hook, json),
             Command::Init { shell } => init::run(shell),
             Command::Ssh {
                 host,
@@ -296,6 +232,7 @@ impl Cli {
             } => ssh::run(&host, cleanup, &ssh_args),
             Command::Upgrade { check } => upgrade::run(check),
             Command::Uninstall { yes, purge } => uninstall::run(yes, purge),
+            Command::Internal(cmd) => internal::run(cmd),
         }
     }
 }
